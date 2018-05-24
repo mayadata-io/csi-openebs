@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"bytes"
 	"io/ioutil"
-	mayav1 "github.com/kubernetes-incubator/external-storage/openebs/types/v1"
+	mayav1 "github.com/princerachit/csi-openebs/pkg/openebs/v1"
 	"gopkg.in/yaml.v2"
 	"errors"
+	"net/url"
 )
 
 // CreateVolume requests mapi server to create an openebs volume. It returns an error if volume creation fails
@@ -19,10 +20,10 @@ func (mayaConfig MayaConfig) CreateVolume(spec mayav1.VolumeSpec) error {
 	// Marshal serializes the value provided into a YAML document
 	yamlValue, _ := yaml.Marshal(spec)
 
-	glog.V(4).Infof("[DEBUG] volume Spec Created:\n%v\n", string(yamlValue))
+	glog.Infof("[DEBUG] volume Spec Created:\n%v\n", string(yamlValue))
 
 	url, err := mayaConfig.GetVolumeURL(versionLatest)
-	glog.V(4).Infof("[DEBUG] create volume URL %v", url.String())
+	glog.Infof("[DEBUG] create volume URL %v", url.String())
 	if err != nil {
 		return err
 	}
@@ -57,7 +58,7 @@ func (mayaConfig MayaConfig) CreateVolume(spec mayav1.VolumeSpec) error {
 
 // DeleteVolume requests mapi server to delete an openebs volume. It returns an error if volume deletion fails
 func (mayaConfig MayaConfig) DeleteVolume(volumeName string) error {
-	glog.V(2).Infof("[DEBUG] Delete Volume :%v", string(volumeName))
+	glog.Infof("[DEBUG] Delete Volume :%v", string(volumeName))
 
 	url, err := mayaConfig.GetVolumeDeleteURL(versionLatest, volumeName)
 	if err != nil {
@@ -85,30 +86,64 @@ func (mayaConfig MayaConfig) DeleteVolume(volumeName string) error {
 	return nil
 }
 
-// ListVolume requests mapi server to GET the details
+// GetVolume requests mapi server to GET the details
 // of a volume and returns it by filling into *mayav1.Volume.
 // If the volume does not exist or can't be retrieved then it returns an error
-func (mayaConfig MayaConfig) ListVolume(volumeName string) (*mayav1.Volume, error) {
+func (mayaConfig MayaConfig) GetVolume(volumeName string) (*mayav1.Volume, error) {
 	var volume mayav1.Volume
-
-	glog.V(2).Infof("[DEBUG] Get details for Volume :%v", string(volumeName))
 
 	url, err := mayaConfig.GetVolumeInfoURL(versionLatest, volumeName)
 	if err != nil {
 		return nil, err
 	}
+	glog.Infof("[DEBUG] Requesting for volume details at %s", url.String())
 
-	glog.V(2).Infof("[DEBUG] Requesting for volume details at %s", url.String())
+	resp, err := reqVolume(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	// Fill the obtained json into volume
+	json.NewDecoder(resp.Body).Decode(&volume)
+	glog.Infof("volume Details Successfully Retrieved %v", volume)
+
+	return &volume, nil
+}
+
+// ListAllVolumes requests mapi server to GET the details of all volumes
+func (mayaConfig MayaConfig) ListAllVolumes() (*[]mayav1.Volume, error) {
+	var volumesList mayav1.VolumeList
+
+	glog.Infof("[DEBUG] Get details for all volumesList")
+
+	url, err := mayaConfig.GetVolumeURL(versionLatest)
+	if err != nil {
+		return nil, err
+	}
+	glog.Infof("[DEBUG] Request Url %s", url)
+	resp, err := reqVolume(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	// Fill the obtained json into volume
+	json.NewDecoder(resp.Body).Decode(&volumesList)
+	glog.Infof("volume Details Successfully Retrieved %v", volumesList)
+
+	return &volumesList.Items, nil
+}
+
+func reqVolume(url *url.URL) (*http.Response, error) {
 	req, err := http.NewRequest("GET", url.String(), nil)
 	c := &http.Client{
 		Timeout: timeout,
 	}
+
 	resp, err := c.Do(req)
 	if err != nil {
 		glog.Errorf("Error when connecting to maya-apiserver %v", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
 
 	code := resp.StatusCode
 	if code != http.StatusOK {
@@ -116,9 +151,5 @@ func (mayaConfig MayaConfig) ListVolume(volumeName string) (*mayav1.Volume, erro
 		return nil, errors.New("HTTP Status error from maya-apiserver: " + http.StatusText(code))
 	}
 
-	// Fill the obtained json into volume
-	json.NewDecoder(resp.Body).Decode(&volume)
-	glog.V(2).Infof("volume Details Successfully Retrieved %v", volume)
-
-	return &volume, nil
+	return resp, nil
 }

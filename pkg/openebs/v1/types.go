@@ -16,12 +16,12 @@ limitations under the License.
 
 package v1
 
-//VolumeSpec holds the config for creating a VSM
+//VolumeSpec holds the config for creating a CAS volume
 type VolumeSpec struct {
 	Kind       string `yaml:"kind"`
 	APIVersion string `yaml:"apiVersion"`
-	Metadata   struct {
-		Name   string `yaml:"name"`
+	Metadata struct {
+		Name string `yaml:"name"`
 		Labels struct {
 			Storage      string `yaml:"volumeprovisioner.mapi.openebs.io/storage-size"`
 			StorageClass string `yaml:"k8s.io/storage-class"`
@@ -36,7 +36,7 @@ type Volume struct {
 		AccessModes interface{} `json:"AccessModes"`
 		Capacity    interface{} `json:"Capacity"`
 		ClaimRef    interface{} `json:"ClaimRef"`
-		OpenEBS     struct {
+		OpenEBS struct {
 			VolumeID string `json:"volumeID"`
 		} `json:"OpenEBS"`
 		PersistentVolumeReclaimPolicy string `json:"PersistentVolumeReclaimPolicy"`
@@ -53,4 +53,10 @@ type Volume struct {
 		CreationTimestamp interface{} `json:"creationTimestamp"`
 		Name              string      `json:"name"`
 	} `json:"metadata"`
+}
+
+// VolumeList holds the response of list volumes which is a collection of volumes
+type VolumeList struct {
+	Items    []Volume    `json:"items"`
+	Metadata interface{} `json:"metadata"`
 }
