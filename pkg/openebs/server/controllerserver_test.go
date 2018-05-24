@@ -22,37 +22,28 @@ import (
 	"fmt"
 	mayav1 "github.com/princerachit/csi-openebs/pkg/openebs/v1"
 	"encoding/json"
+	"github.com/princerachit/csi-openebs/pkg/openebs/mayaproxy"
+	"net/url"
+	"context"
 )
 
-func TestCheckArguments(t *testing.T) {
-	req := &csi.CreateVolumeRequest{Name: "csi-volume-1"}
-	fmt.Printf("Test 1: req=%v", req)
-	if err := checkArguments(req); err == nil {
-		t.Errorf("Expected error when req=%v", req)
-	} else {
-		fmt.Println("passed\n")
-	}
-
-	req = &csi.CreateVolumeRequest{Name: "csi-volume-1", VolumeCapabilities: []*csi.VolumeCapability{&csi.VolumeCapability{AccessMode: nil}}}
-	fmt.Printf("Test 2: req=%v", req)
-	if err := checkArguments(req); err == nil {
-		t.Errorf("Expected error when req=%v", req)
-	} else {
-		fmt.Println("passed\n")
-	}
-
-	req = &csi.CreateVolumeRequest{Name: "csi-volume-1", VolumeCapabilities: []*csi.VolumeCapability{&csi.VolumeCapability{AccessMode: nil}}, Parameters: map[string]string{"storage-class-name": "openebs"}}
-	fmt.Printf("Test 3: req=%v", req)
-	if err := checkArguments(req); err != nil {
-		t.Errorf("Expected success when req=%v", req)
-	} else {
-		fmt.Println("passed\n")
-	}
+type MockK8sClient struct {
+	mayaproxy.K8sClientService
 }
 
-func TestGetVolumeAttributes(t *testing.T) {
-	jsonMap := make(map[string]interface{})
-	annotation := []string{`{
+type MockMayaService struct {
+	mayaproxy.MayaApiService
+}
+
+var (
+	mapiURI    *url.URL
+	mConfig    *mayaproxy.MayaConfig
+	mService   MockMayaService
+	mK8sClient MockK8sClient
+)
+
+var (
+	annotation = []string{`{
 		"vsm.openebs.io/iqn":            "iqn.2016-09.com.openebs.jiva:pvc-da18673b-533e-11e8-be33-000c29116015",
 		"vsm.openebs.io/targetportals":  "10.103.7.228:3260",
 		"openebs.io/jiva-target-portal": "10.103.7.228:3260",
@@ -64,7 +55,55 @@ func TestGetVolumeAttributes(t *testing.T) {
 		"openebs.io/jiva-target-portal": "10.103.7.228:3260",
 		"openebs.io/capacity":           "5G"
       }`,
+		`{
+		"vsm.openebs.io/iqn":            "iqn.2016-09.com.openebs.cstor:pvc-da18673b-ds4w-11e8-be33-000c29116015"
+      }`,
 	}
+)
+
+func init() {
+	mapiURI, _ = url.Parse("http://svc.maya-api-server.local:5656")
+	mService = MockMayaService{}
+	mK8sClient = MockK8sClient{}
+	mConfig = &mayaproxy.MayaConfig{MayaService: mService, MapiURI: *mapiURI, Namespace: "openebs"}
+}
+
+func getMayaVolume(jsonMap map[string]interface{}) mayav1.Volume {
+	return mayav1.Volume{Metadata: struct {
+		Annotations       interface{} `json:"annotations"`
+		CreationTimestamp interface{} `json:"creationTimestamp"`
+		Name              string      `json:"name"`
+	}{Annotations: jsonMap, CreationTimestamp: "", Name: ""}}
+
+}
+
+func TestCheckArguments(t *testing.T) {
+	req := &csi.CreateVolumeRequest{Name: "csi-volume-1"}
+	fmt.Printf("Test 1: req=%v", req)
+	if err := checkArguments(req); err == nil {
+		t.Errorf("Expected error when req=%v", req)
+	} else {
+		fmt.Println("passed\n")
+	}
+
+	req = &csi.CreateVolumeRequest{Name: "csi-volume-1", VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}}}
+	fmt.Printf("Test 2: req=%v", req)
+	if err := checkArguments(req); err == nil {
+		t.Errorf("Expected error when req=%v", req)
+	} else {
+		fmt.Println("passed\n")
+	}
+
+	req = &csi.CreateVolumeRequest{Name: "csi-volume-1", VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}}, Parameters: map[string]string{"storage-class-name": "openebs"}}
+	fmt.Printf("Test 3: req=%v", req)
+	if err := checkArguments(req); err != nil {
+		t.Errorf("Expected success when req=%v", req)
+	} else {
+		fmt.Println("passed\n")
+	}
+}
+
+func TestGetVolumeAttributes(t *testing.T) {
 
 	var expectedAttributes = make([]map[string]string, 2)
 
@@ -87,16 +126,16 @@ func TestGetVolumeAttributes(t *testing.T) {
 	}
 
 	for i := 0; i < 2; i++ {
+		jsonMap := make(map[string]interface{})
 		if err := json.Unmarshal([]byte(annotation[i]), &jsonMap); err != nil {
 			t.Errorf(fmt.Sprintf("%s", err))
 		}
-		v1 := mayav1.Volume{Metadata: struct {
-			Annotations       interface{} `json:"annotations"`
-			CreationTimestamp interface{} `json:"creationTimestamp"`
-			Name              string      `json:"name"`
-		}{Annotations: jsonMap, CreationTimestamp: "", Name: ""}}
+		v1 := getMayaVolume(jsonMap)
+		attributes, err := getVolumeAttributes(&v1)
 
-		attributes := getVolumeAttributes(&v1)
+		if err != nil {
+			t.Errorf("Unexpected error occurred: %s", err)
+		}
 
 		if len(attributes) != len(expectedAttributes[i]) {
 			t.Errorf("Unexpected length of attributes")
@@ -108,6 +147,22 @@ func TestGetVolumeAttributes(t *testing.T) {
 			}
 		}
 	}
+
+	jsonMap := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(annotation[2]), &jsonMap); err != nil {
+		t.Errorf(fmt.Sprintf("%s", err))
+	}
+	v1 := getMayaVolume(jsonMap)
+	_, err := getVolumeAttributes(&v1)
+	if err == nil {
+		t.Errorf("missing volume annotation should cause error")
+	}
+
+	_, err = getVolumeAttributes(nil)
+	if err == nil {
+		t.Errorf("nil volume should have caused an error")
+	}
+
 }
 
 func TestCreateVolumeSpec(t *testing.T) {
@@ -143,7 +198,19 @@ func TestCreateVolumeSpec(t *testing.T) {
 	}
 }
 
+func TestCreateVolume(t *testing.T) {
+	mayaConfig = mConfig
+	req := &csi.CreateVolumeRequest{Name: "csi-volume-1",
+		VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}},
+		Parameters: map[string]string{"storage-class-name": "openebs"},
+		CapacityRange: &csi.CapacityRange{RequiredBytes: 10000000000},
+	}
+
+	controller := ControllerServer{}
+	controller.CreateVolume(context.Background(), req)
+}
+
 func TestListVolumes(t *testing.T) {
-	resp := `{"items":[{"metadata":{"annotations":{"openebs.io/volume-monitor":"false","vsm.openebs.io/controller-status":"Running","openebs.io/jiva-target-portal":"10.106.196.157:3260","vsm.openebs.io/iqn":"iqn.2016-09.com.openebs.jiva:pvc-2f9de7d5-5e7c-11e8-9832-42010a8e0002","vsm.openebs.io/volume-size":"1073741824B","openebs.io/capacity":"1073741824B","openebs.io/jiva-controller-ips":"172.17.0.4","openebs.io/jiva-replica-ips":"172.17.0.8,nil,nil","vsm.openebs.io/cluster-ips":"10.106.196.157","openebs.io/volume-type":"jiva","deployment.kubernetes.io/revision":"1","openebs.io/jiva-replica-count":"3","vsm.openebs.io/controller-ips":"172.17.0.4","vsm.openebs.io/replica-status":"Running,Pending,Pending","vsm.openebs.io/targetportals":"10.106.196.157:3260","openebs.io/jiva-controller-cluster-ip":"10.106.196.157","openebs.io/jiva-iqn":"iqn.2016-09.com.openebs.jiva:pvc-2f9de7d5-5e7c-11e8-9832-42010a8e0002","openebs.io/storage-pool":"default","vsm.openebs.io/replica-count":"3","openebs.io/jiva-controller-status":"Running","vsm.openebs.io/replica-ips":"172.17.0.8,nil,nil","openebs.io/jiva-replica-status":"Running,Pending,Pending"},"creationTimestamp":null,"labels":{},"name":"pvc-2f9de7d5-5e7c-11e8-9832-42010a8e0002"},"status":{"Message":"","Phase":"","Reason":""}}],"metadata":{}}`
+	//	resp := `{"items":[{"metadata":{"annotations":{"openebs.io/volume-monitor":"false","vsm.openebs.io/controller-status":"Running","openebs.io/jiva-target-portal":"10.106.196.157:3260","vsm.openebs.io/iqn":"iqn.2016-09.com.openebs.jiva:pvc-2f9de7d5-5e7c-11e8-9832-42010a8e0002","vsm.openebs.io/volume-size":"1073741824B","openebs.io/capacity":"1073741824B","openebs.io/jiva-controller-ips":"172.17.0.4","openebs.io/jiva-replica-ips":"172.17.0.8,nil,nil","vsm.openebs.io/cluster-ips":"10.106.196.157","openebs.io/volume-type":"jiva","deployment.kubernetes.io/revision":"1","openebs.io/jiva-replica-count":"3","vsm.openebs.io/controller-ips":"172.17.0.4","vsm.openebs.io/replica-status":"Running,Pending,Pending","vsm.openebs.io/targetportals":"10.106.196.157:3260","openebs.io/jiva-controller-cluster-ip":"10.106.196.157","openebs.io/jiva-iqn":"iqn.2016-09.com.openebs.jiva:pvc-2f9de7d5-5e7c-11e8-9832-42010a8e0002","openebs.io/storage-pool":"default","vsm.openebs.io/replica-count":"3","openebs.io/jiva-controller-status":"Running","vsm.openebs.io/replica-ips":"172.17.0.8,nil,nil","openebs.io/jiva-replica-status":"Running,Pending,Pending"},"creationTimestamp":null,"labels":{},"name":"pvc-2f9de7d5-5e7c-11e8-9832-42010a8e0002"},"status":{"Message":"","Phase":"","Reason":""}}],"metadata":{}}`
 
 }

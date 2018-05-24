@@ -13,16 +13,13 @@ import (
 )
 
 // CreateVolume requests mapi server to create an openebs volume. It returns an error if volume creation fails
-func (mayaConfig MayaConfig) CreateVolume(spec mayav1.VolumeSpec) error {
-	spec.Kind = "PersistentVolumeClaim"
-	spec.APIVersion = "v1"
-
+func (mayaService MayaService) CreateVolume(mapiURI *url.URL, spec mayav1.VolumeSpec) error {
 	// Marshal serializes the value provided into a YAML document
 	yamlValue, _ := yaml.Marshal(spec)
 
 	glog.Infof("[DEBUG] volume Spec Created:\n%v\n", string(yamlValue))
 
-	url, err := mayaConfig.GetVolumeURL(versionLatest)
+	url, err := mayaService.GetVolumeURL(mapiURI, versionLatest)
 	glog.Infof("[DEBUG] create volume URL %v", url.String())
 	if err != nil {
 		return err
@@ -57,10 +54,10 @@ func (mayaConfig MayaConfig) CreateVolume(spec mayav1.VolumeSpec) error {
 }
 
 // DeleteVolume requests mapi server to delete an openebs volume. It returns an error if volume deletion fails
-func (mayaConfig MayaConfig) DeleteVolume(volumeName string) error {
+func (mayaService *MayaService) DeleteVolume(mapiURI *url.URL, volumeName string) error {
 	glog.Infof("[DEBUG] Delete Volume :%v", string(volumeName))
 
-	url, err := mayaConfig.GetVolumeDeleteURL(versionLatest, volumeName)
+	url, err := mayaService.GetVolumeDeleteURL(mapiURI, versionLatest, volumeName)
 	if err != nil {
 		return err
 	}
@@ -89,10 +86,10 @@ func (mayaConfig MayaConfig) DeleteVolume(volumeName string) error {
 // GetVolume requests mapi server to GET the details
 // of a volume and returns it by filling into *mayav1.Volume.
 // If the volume does not exist or can't be retrieved then it returns an error
-func (mayaConfig MayaConfig) GetVolume(volumeName string) (*mayav1.Volume, error) {
+func (mayaService *MayaService) GetVolume(mapiURI *url.URL, volumeName string) (*mayav1.Volume, error) {
 	var volume mayav1.Volume
 
-	url, err := mayaConfig.GetVolumeInfoURL(versionLatest, volumeName)
+	url, err := mayaService.GetVolumeInfoURL(mapiURI, versionLatest, volumeName)
 	if err != nil {
 		return nil, err
 	}
@@ -111,12 +108,12 @@ func (mayaConfig MayaConfig) GetVolume(volumeName string) (*mayav1.Volume, error
 }
 
 // ListAllVolumes requests mapi server to GET the details of all volumes
-func (mayaConfig MayaConfig) ListAllVolumes() (*[]mayav1.Volume, error) {
+func (mayaService *MayaService) ListAllVolumes(mapiURI *url.URL) (*[]mayav1.Volume, error) {
 	var volumesList mayav1.VolumeList
 
 	glog.Infof("[DEBUG] Get details for all volumesList")
 
-	url, err := mayaConfig.GetVolumeURL(versionLatest)
+	url, err := mayaService.GetVolumeURL(mapiURI, versionLatest)
 	if err != nil {
 		return nil, err
 	}

@@ -12,7 +12,7 @@ const (
 
 var (
 	mayaConfig = &MayaConfig{
-		mapiURI: url.URL{
+		MapiURI: url.URL{
 			Scheme: urlScheme,
 			Host:   mApiUrl,
 		},
@@ -53,7 +53,7 @@ func TestGetVolumeURL(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	expectedVolumeUrl := mayaConfig.mapiURI.String() + "/" + "latest/volumes/"
+	expectedVolumeUrl := mayaConfig.MapiURI.String() + "/" + "latest/volumes/"
 
 	if obtainedUrl.String() != expectedVolumeUrl {
 		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())
@@ -70,7 +70,7 @@ func TestGetVolumeDeleteURL(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	expectedVolumeUrl := mayaConfig.mapiURI.String() + "/" + "latest/volumes/delete/pvc-prince-12345"
+	expectedVolumeUrl := mayaConfig.MapiURI.String() + "/" + "latest/volumes/delete/pvc-prince-12345"
 
 	if obtainedUrl.String() != expectedVolumeUrl {
 		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())
@@ -94,7 +94,7 @@ func TestGetVolumeInfoURL(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	expectedVolumeUrl := mayaConfig.mapiURI.String() + "/" + "latest/volumes/info/pvc-1212"
+	expectedVolumeUrl := mayaConfig.MapiURI.String() + "/" + "latest/volumes/info/pvc-1212"
 
 	if obtainedUrl.String() != expectedVolumeUrl {
 		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())

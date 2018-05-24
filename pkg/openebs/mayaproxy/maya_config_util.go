@@ -24,9 +24,9 @@ const (
 )
 
 type MayaApiServerUrl interface {
-	GetVolumeURL(version string) (url.URL, error)
-	GetVolumeDeleteURL(version string) (url.URL, error)
-	GetVolumeInfoURL(version, volumeName string) (url.URL, error)
+	GetVolumeURL(mapiURI *url.URL, version string) (*url.URL, error)
+	GetVolumeDeleteURL(mapiURI *url.URL, version, volumeName string) (*url.URL, error)
+	GetVolumeInfoURL(mapiURI *url.URL, version, volumeName string) (*url.URL, error)
 }
 
 // returns error  if version is empty.
@@ -47,25 +47,25 @@ func validateVolumeName(volumeName string) error {
 }
 
 // GetVolumeURL returns the volume url of mApi server
-func (mayaConfig MayaConfig) GetVolumeURL(version string) (*url.URL, error) {
+func (mayaService MayaService) GetVolumeURL(mapiURI *url.URL, version string) (*url.URL, error) {
 	err := validateVersion(version)
 	if err != nil {
 		return nil, err
 	}
-	scheme := mayaConfig.mapiURI.Scheme
+	scheme := mapiURI.Scheme
 	if scheme == "" {
 		scheme = "http"
 	}
 	return &url.URL{
 		Scheme: scheme,
-		Host:   mayaConfig.mapiURI.Host,
+		Host:   mapiURI.Host,
 		Path:   "/" + version + "/" + volumes + "/",
 	}, nil
 }
 
 // GetVolumeDeleteURL returns the volume url of mApi server
-func (mayaConfig MayaConfig) GetVolumeDeleteURL(version, volumeName string) (*url.URL, error) {
-	deleteVolumeURL, err := mayaConfig.GetVolumeURL(version)
+func (mayaService MayaService) GetVolumeDeleteURL(mapiURI *url.URL, version, volumeName string) (*url.URL, error) {
+	deleteVolumeURL, err := mayaService.GetVolumeURL(mapiURI, version)
 	if err != nil {
 		return nil, err
 	}
@@ -78,8 +78,8 @@ func (mayaConfig MayaConfig) GetVolumeDeleteURL(version, volumeName string) (*ur
 }
 
 // GetVolumeInfoURL returns the info url for a volume
-func (mayaConfig MayaConfig) GetVolumeInfoURL(version, volumeName string) (*url.URL, error) {
-	volumeInfoURL, err := mayaConfig.GetVolumeURL(version)
+func (mayaService MayaService) GetVolumeInfoURL(mapiURI *url.URL, version, volumeName string) (*url.URL, error) {
+	volumeInfoURL, err := mayaService.GetVolumeURL(mapiURI, version)
 	if err != nil {
 		return nil, err
 	}

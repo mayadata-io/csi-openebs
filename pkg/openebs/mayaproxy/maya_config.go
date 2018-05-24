@@ -7,6 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/api/core/v1"
+	mayav1 "github.com/princerachit/csi-openebs/pkg/openebs/v1"
 	"os"
 	"fmt"
 	"errors"
@@ -14,8 +15,10 @@ import (
 
 type MayaApiService interface {
 	GetMayaClusterIP(client kubernetes.Interface) (string, error)
-	ProxyCreateVolume() (error)
-	ProxyDeleteVolume() (error)
+	CreateVolume(mapiURI *url.URL, spec mayav1.VolumeSpec) error
+	DeleteVolume(mapiURI *url.URL, volumeName string) error
+	GetVolume(mapiURI *url.URL, volumeName string) (*mayav1.Volume, error)
+	ListAllVolumes(mapiURI *url.URL) (*[]mayav1.Volume, error)
 	MayaApiServerUrl
 }
 
@@ -24,16 +27,34 @@ type K8sClientService interface {
 	getSvcObject(client *kubernetes.Clientset, namespace string) (*v1.Service, error)
 }
 
-type K8sClient struct{}
+type K8sClient struct {
+	K8sClientService
+}
+
+type K8sClientWrapper struct {
+	k8sClient K8sClient
+}
 
 // MayaConfig is an aggregate of configurations related to mApi server
 type MayaConfig struct {
 	// Maya-API Server URL running in the cluster
-	mapiURI url.URL
-	// namespace where openebs operator runs
-	namespace string
+	MapiURI url.URL
+	// Namespace where openebs operator runs
+	Namespace string
 
+	MayaService MayaApiService
+}
+
+type MayaService struct {
 	MayaApiService
+}
+
+func (mayaConfig MayaConfig) GetURL() *url.URL {
+	return &mayaConfig.MapiURI
+}
+
+func (mayaConfig MayaConfig) GetNamespace() string {
+	return mayaConfig.Namespace
 }
 
 func (k8sClient K8sClient) getK8sClient() (*kubernetes.Clientset, error) {
@@ -64,19 +85,19 @@ must check for error before proceeding to use MayaConfig
 */
 func (mayaConfig *MayaConfig) SetupMayaConfig(k8sClient K8sClientService) error {
 
-	// setup namespace
-	if mayaConfig.namespace = os.Getenv("OPENEBS_NAMESPACE"); mayaConfig.namespace == "" {
-		mayaConfig.namespace = "default"
+	// setup Namespace
+	if mayaConfig.Namespace = os.Getenv("OPENEBS_NAMESPACE"); mayaConfig.Namespace == "" {
+		mayaConfig.Namespace = "default"
 	}
-	glog.Info("OpenEBS volume provisioner namespace ", mayaConfig.namespace)
+	glog.Info("OpenEBS volume provisioner Namespace ", mayaConfig.Namespace)
 
 	client, err := k8sClient.getK8sClient()
 	if err != nil {
 		return errors.New("Error creating kubernetes clientset")
 	}
 
-	// setup mapiURI using the Maya API Server Service
-	svc, err := k8sClient.getSvcObject(client, mayaConfig.namespace)
+	// setup MapiURI using the Maya API Server Service
+	svc, err := k8sClient.getSvcObject(client, mayaConfig.Namespace)
 	if err != nil {
 		glog.Errorf("Error getting maya-apiserver IP Address: %v", err)
 		return errors.New("Error creating kubernetes clientset")
@@ -89,12 +110,20 @@ func (mayaConfig *MayaConfig) SetupMayaConfig(k8sClient K8sClientService) error 
 		glog.Errorf("Could not parse maya-apiserver server url: %v", err)
 		return err
 	}
-	mayaConfig.mapiURI = *mapiUrl
-	glog.V(2).Infof("Maya Cluster IP: %v", mayaConfig.mapiURI)
-	glog.V(2).Infof("Host: %v Scheme: %v Path: %v", mayaConfig.mapiURI.Host, mayaConfig.mapiURI.Scheme, mayaConfig.mapiURI.Path)
+	mayaConfig.MapiURI = *mapiUrl
+	glog.V(2).Infof("Maya Cluster IP: %v", mayaConfig.MapiURI)
+	glog.V(2).Infof("Host: %v Scheme: %v Path: %v", mayaConfig.MapiURI.Host, mayaConfig.MapiURI.Scheme, mayaConfig.MapiURI.Path)
 	return nil
 }
 
-func GetNewMayaConfig() *MayaConfig {
-	return &MayaConfig{}
+func GetNewMayaConfig(clientWrapper *K8sClientWrapper) (*MayaConfig, error) {
+	if clientWrapper == nil {
+		clientWrapper = &K8sClientWrapper{k8sClient: K8sClient{}}
+	}
+	config := &MayaConfig{MayaService: &MayaService{}}
+	err := config.SetupMayaConfig(clientWrapper.k8sClient)
+	if err != nil {
+		config = nil
+	}
+	return config, err
 }

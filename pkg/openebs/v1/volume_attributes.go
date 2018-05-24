@@ -10,7 +10,7 @@ const (
 	Capacity       = "capacity"
 
 	// OpenEBS annotation constants
-	OpenebsIqn          = "vsm.openebs.io/Iqn"
+	OpenebsIqn          = "vsm.openebs.io/iqn"
 	OpenebsTargetPortal = "vsm.openebs.io/targetportals"
 	OpenebsPortals      = "openebs.io/jiva-target-portal"
 	OpenebsCapacity     = "openebs.io/capacity"
