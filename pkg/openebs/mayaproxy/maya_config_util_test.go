@@ -11,12 +11,11 @@ const (
 )
 
 var (
-	mayaConfig = &MayaConfig{
-		MapiURI: url.URL{
-			Scheme: urlScheme,
-			Host:   mApiUrl,
-		},
+	mapiUrl = &url.URL{
+		Scheme: urlScheme,
+		Host:   mApiUrl,
 	}
+	mayaService = &MayaService{}
 )
 
 func TestValidateVersion(t *testing.T) {
@@ -49,39 +48,47 @@ func TestValidateVolumeName(t *testing.T) {
 
 func TestGetVolumeURL(t *testing.T) {
 
-	obtainedUrl, err := mayaConfig.GetVolumeURL(versionLatest)
+	obtainedUrl, err := mayaService.GetVolumeURL(mapiUrl, versionLatest)
 	if err != nil {
 		t.Error(err)
 	}
-	expectedVolumeUrl := mayaConfig.MapiURI.String() + "/" + "latest/volumes/"
+	expectedVolumeUrl := mapiUrl.String() + "/" + "latest/volumes/"
 
 	if obtainedUrl.String() != expectedVolumeUrl {
 		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())
 	}
-	obtainedUrl, err = mayaConfig.GetVolumeURL("")
+	obtainedUrl, err = mayaService.GetVolumeURL(mapiUrl, "")
 	if err == nil {
 		t.Error("Empty version should cause an error")
+	}
+
+	obtainedUrl, err = mayaService.GetVolumeURL(mapiUrl, "latest")
+	if obtainedUrl.String() != expectedVolumeUrl {
+		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())
 	}
 }
 
 func TestGetVolumeDeleteURL(t *testing.T) {
 
-	obtainedUrl, err := mayaConfig.GetVolumeDeleteURL(versionLatest, "pvc-prince-12345")
+	obtainedUrl, err := mayaService.GetVolumeDeleteURL(mapiUrl, versionLatest, "pvc-prince-12345")
 	if err != nil {
 		t.Error(err)
 	}
-	expectedVolumeUrl := mayaConfig.MapiURI.String() + "/" + "latest/volumes/delete/pvc-prince-12345"
+	expectedVolumeUrl := mapiUrl.String() + "/" + "latest/volumes/delete/pvc-prince-12345"
 
 	if obtainedUrl.String() != expectedVolumeUrl {
 		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())
 	}
 
-	obtainedUrl, err = mayaConfig.GetVolumeDeleteURL("", "pvc-prince-12345")
+	obtainedUrl, err = mayaService.GetVolumeDeleteURL(mapiUrl, "", "pvc-prince-12345")
 	if err == nil {
 		t.Error("Empty version should cause an error")
 	}
 
-	obtainedUrl, err = mayaConfig.GetVolumeDeleteURL("", "pvc-prince-12345")
+	mapiURI.Scheme = ""
+	defer func() { mapiURI.Scheme = urlScheme }()
+
+	obtainedUrl, err = mayaService.GetVolumeDeleteURL(mapiUrl, "", "pvc-prince-12345")
 	if err == nil {
 		t.Error("Empty volume name should cause an error")
 	}
@@ -90,22 +97,22 @@ func TestGetVolumeDeleteURL(t *testing.T) {
 
 func TestGetVolumeInfoURL(t *testing.T) {
 
-	obtainedUrl, err := mayaConfig.GetVolumeInfoURL(versionLatest, "pvc-1212")
+	obtainedUrl, err := mayaService.GetVolumeInfoURL(mapiUrl, versionLatest, "pvc-1212")
 	if err != nil {
 		t.Error(err)
 	}
-	expectedVolumeUrl := mayaConfig.MapiURI.String() + "/" + "latest/volumes/info/pvc-1212"
+	expectedVolumeUrl := mapiUrl.String() + "/" + "latest/volumes/info/pvc-1212"
 
 	if obtainedUrl.String() != expectedVolumeUrl {
 		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())
 	}
 
-	obtainedUrl, err = mayaConfig.GetVolumeInfoURL("", "pvc-1212")
+	obtainedUrl, err = mayaService.GetVolumeInfoURL(mapiUrl, "", "pvc-1212")
 	if err == nil {
 		t.Error("Empty version should cause an error")
 	}
 
-	obtainedUrl, err = mayaConfig.GetVolumeInfoURL("v2", "")
+	obtainedUrl, err = mayaService.GetVolumeInfoURL(mapiUrl, "v2", "")
 	if err == nil {
 		t.Error("Empty volume name should cause an error")
 	}

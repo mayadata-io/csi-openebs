@@ -27,12 +27,19 @@ type K8sClientService interface {
 	getSvcObject(client *kubernetes.Clientset, namespace string) (*v1.Service, error)
 }
 
+type Builder interface {
+	GetNewMayaConfig(clientWrapper *K8sClientWrapper) (*MayaConfig, error)
+}
+
+type MayaConfigBuilder struct {
+	Builder
+}
 type K8sClient struct {
 	K8sClientService
 }
 
 type K8sClientWrapper struct {
-	k8sClient K8sClient
+	ClientService K8sClientService
 }
 
 // MayaConfig is an aggregate of configurations related to mApi server
@@ -93,14 +100,14 @@ func (mayaConfig *MayaConfig) SetupMayaConfig(k8sClient K8sClientService) error 
 
 	client, err := k8sClient.getK8sClient()
 	if err != nil {
-		return errors.New("Error creating kubernetes clientset")
+		return errors.New("error creating kubernetes clientset")
 	}
 
 	// setup MapiURI using the Maya API Server Service
 	svc, err := k8sClient.getSvcObject(client, mayaConfig.Namespace)
 	if err != nil {
 		glog.Errorf("Error getting maya-apiserver IP Address: %v", err)
-		return errors.New("Error creating kubernetes clientset")
+		return errors.New("error creating kubernetes clientset")
 	}
 
 	// Remove the hardcoding of port index
@@ -116,12 +123,12 @@ func (mayaConfig *MayaConfig) SetupMayaConfig(k8sClient K8sClientService) error 
 	return nil
 }
 
-func GetNewMayaConfig(clientWrapper *K8sClientWrapper) (*MayaConfig, error) {
+func (builder MayaConfigBuilder) GetNewMayaConfig(clientWrapper *K8sClientWrapper) (*MayaConfig, error) {
 	if clientWrapper == nil {
-		clientWrapper = &K8sClientWrapper{k8sClient: K8sClient{}}
+		clientWrapper = &K8sClientWrapper{ClientService: K8sClient{}}
 	}
 	config := &MayaConfig{MayaService: &MayaService{}}
-	err := config.SetupMayaConfig(clientWrapper.k8sClient)
+	err := config.SetupMayaConfig(clientWrapper.ClientService)
 	if err != nil {
 		config = nil
 	}

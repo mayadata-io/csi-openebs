@@ -33,8 +33,9 @@ import (
 )
 
 var (
-	mayaConfig    *mayaproxy.MayaConfig
-	clientWrapper *mayaproxy.K8sClientWrapper
+	mayaConfig        *mayaproxy.MayaConfig
+	clientWrapper     *mayaproxy.K8sClientWrapper
+	mayaConfigBuilder mayaproxy.Builder
 )
 
 type ControllerServer struct {
@@ -107,6 +108,22 @@ func createVolumeSpec(req *csi.CreateVolumeRequest) (mayav1.VolumeSpec) {
 	return volumeSpec
 }
 
+// setupPrecondition initializes mayaConfigBuilder and mayaConfig if not initialized yet
+func setupPrecondition() error {
+	var err error
+	if mayaConfigBuilder == nil {
+		mayaConfigBuilder = mayaproxy.MayaConfigBuilder{}
+	}
+
+	if mayaConfig == nil {
+		mayaConfig, err = mayaConfigBuilder.GetNewMayaConfig(clientWrapper)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	// Check arguments
 	err := checkArguments(req)
@@ -115,12 +132,9 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	}
 
 	// initialize mayaConfig if not initialized yet
-	if mayaConfig == nil {
-		mayaConfig, err = mayaproxy.GetNewMayaConfig(clientWrapper)
-		if err != nil {
-			glog.Errorf("error setting up mayaConfig")
-			return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
-		}
+	err = setupPrecondition()
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
 
 	var volume *mayav1.Volume
@@ -141,7 +155,7 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 	volume, err = mayaConfig.MayaService.GetVolume(mayaConfig.GetURL(), req.GetName())
 	if err != nil {
-		return nil, status.Error(codes.DeadlineExceeded, fmt.Sprintf("Unable to contact amapi server: %v", err))
+		return nil, status.Error(codes.DeadlineExceeded, fmt.Sprintf("Unable to contact mapi server: %v", err))
 	}
 
 	glog.Infof("[DEBUG] Volume details %s", volume)
@@ -171,18 +185,10 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
 	glog.Infof("Received request: %v", req)
 	var err error
-	if err = cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
-		glog.Infof("invalid delete volume req: %v", req)
-		return nil, err
-	}
 
-	// initialize mayaConfig if not initialized yet
-	if mayaConfig == nil {
-		mayaConfig, err = mayaproxy.GetNewMayaConfig(clientWrapper)
-		if err != nil {
-			glog.Errorf("error setting up mayaConfig")
-			return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
-		}
+	err = setupPrecondition()
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
 
 	err = mayaConfig.MayaService.DeleteVolume(mayaConfig.GetURL(), req.VolumeId)
@@ -205,15 +211,10 @@ func (cs *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 	glog.Infof("List Volumes req received")
 
 	var err error
-	// initialize mayaConfig if not initialized yet
-	if mayaConfig == nil {
-		mayaConfig, err = mayaproxy.GetNewMayaConfig(clientWrapper)
-		if err != nil {
-			glog.Errorf("error setting up mayaConfig")
-			return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
-		}
+	err = setupPrecondition()
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
-
 	volumes, err := mayaConfig.MayaService.ListAllVolumes(mayaConfig.GetURL())
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
