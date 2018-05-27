@@ -16,6 +16,12 @@ limitations under the License.
 
 package v1
 
+const (
+	PersistentVolumeClaim = "PersistentVolumeClaim"
+	StorageClassName      = "storage-class-name"
+	DefaultNamespace      = "default"
+)
+
 //VolumeSpec holds the config for creating a CAS volume
 type VolumeSpec struct {
 	Kind       string `yaml:"kind"`

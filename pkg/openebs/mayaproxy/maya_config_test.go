@@ -40,12 +40,6 @@ func TestGetK8sClient(t *testing.T) {
 	}
 }
 
-func TestGetNamespace(t *testing.T) {
-	if mayaConfig.Namespace != mayaConfig.GetNamespace() {
-		t.Errorf("Wrong Namespace returned")
-	}
-}
-
 func TestGetNewMayaConfig(t *testing.T) {
 	_, err := MayaConfigBuilder{}.GetNewMayaConfig(&K8sClientWrapper{&K8sClientMock{}})
 	if err != nil {

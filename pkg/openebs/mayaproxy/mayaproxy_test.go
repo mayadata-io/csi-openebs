@@ -240,7 +240,7 @@ func TestDeleteVolume(t *testing.T) {
 	}
 }
 
-func TestReqVolume(t *testing.T) {
+func TestRequestServerGet(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			if r.RequestURI == "/success" {
@@ -254,7 +254,7 @@ func TestReqVolume(t *testing.T) {
 	createAndStartServer(handler)
 	defer tearDownServer()
 
-	_, err := reqVolume(mpMapiURI)
+	_, err := requestServerGet(mpMapiURI)
 	if err == nil {
 		t.Errorf("Error from mapi server should cause error")
 	}
@@ -262,7 +262,7 @@ func TestReqVolume(t *testing.T) {
 	mpMapiURI.Path = "success"
 	defer initServerURI()
 
-	_, err = reqVolume(mpMapiURI)
+	_, err = requestServerGet(mpMapiURI)
 	if err != nil {
 		t.Errorf("200 Response from server should not cause error")
 	}

@@ -20,7 +20,7 @@ const (
 	mayaApiServerService = "maya-apiserver-service"
 
 	// default timeout value
-	timeout = 60 * time.Second
+	timeout = 10 * time.Second
 )
 
 type MayaApiServerUrl interface {

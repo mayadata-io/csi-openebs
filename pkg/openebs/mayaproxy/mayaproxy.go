@@ -100,7 +100,7 @@ func (mayaService *MayaService) GetVolume(mapiURI *url.URL, volumeName string) (
 	}
 	glog.Infof("[DEBUG] Requesting for volume details at %s", url.String())
 
-	resp, err := reqVolume(url)
+	resp, err := requestServerGet(url)
 	// What to do if error is 404 i.e volume does not exist?
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func (mayaService *MayaService) ListAllVolumes(mapiURI *url.URL) (*[]mayav1.Volu
 		return nil, err
 	}
 	glog.Infof("[DEBUG] Request Url %s", url)
-	resp, err := reqVolume(url)
+	resp, err := requestServerGet(url)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,8 @@ func (mayaService *MayaService) ListAllVolumes(mapiURI *url.URL) (*[]mayav1.Volu
 	return &volumesList.Items, nil
 }
 
-func reqVolume(url *url.URL) (*http.Response, error) {
+// requestServerGet performs a get request to the given url
+func requestServerGet(url *url.URL) (*http.Response, error) {
 	req, err := http.NewRequest("GET", url.String(), nil)
 	c := &http.Client{
 		Timeout: timeout,

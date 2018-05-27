@@ -98,12 +98,12 @@ func createVolumeSpec(req *csi.CreateVolumeRequest) (mayav1.VolumeSpec) {
 	volumeSpec := mayav1.VolumeSpec{}
 
 	// define size in bytes to avoid complex conversion logic
-	volumeSpec.Kind = "PersistentVolumeClaim"
+	volumeSpec.Kind = mayav1.PersistentVolumeClaim
 	volumeSpec.APIVersion = "v1"
 	volumeSpec.Metadata.Labels.Storage = fmt.Sprintf("%dB", req.GetCapacityRange().GetRequiredBytes())
-	volumeSpec.Metadata.Labels.StorageClass = req.Parameters["storage-class-name"]
+	volumeSpec.Metadata.Labels.StorageClass = req.Parameters[mayav1.StorageClassName]
 	volumeSpec.Metadata.Name = req.Name
-	volumeSpec.Metadata.Labels.Namespace = "default"
+	volumeSpec.Metadata.Labels.Namespace = mayav1.DefaultNamespace
 
 	return volumeSpec
 }
@@ -140,20 +140,20 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	var volume *mayav1.Volume
 
 	// If volume retrieval fails then create the volume
-	volume, err = mayaConfig.MayaService.GetVolume(mayaConfig.GetURL(), req.GetName())
+	volume, err = mayaConfig.MayaService.GetVolume(&mayaConfig.MapiURI, req.GetName())
 	glog.Infof("[DEBUG] Volume details get volume initially %s", volume)
 	if err != nil {
 		volumeSpec := createVolumeSpec(req)
 
 		glog.Infof("Attempting to create volume")
-		err = mayaConfig.MayaService.CreateVolume(mayaConfig.GetURL(), volumeSpec)
+		err = mayaConfig.MayaService.CreateVolume(&mayaConfig.MapiURI, volumeSpec)
 
 		if err != nil {
 			return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 		}
 	}
 
-	volume, err = mayaConfig.MayaService.GetVolume(mayaConfig.GetURL(), req.GetName())
+	volume, err = mayaConfig.MayaService.GetVolume(&mayaConfig.MapiURI, req.GetName())
 	if err != nil {
 		return nil, status.Error(codes.DeadlineExceeded, fmt.Sprintf("Unable to contact mapi server: %v", err))
 	}
@@ -191,7 +191,7 @@ func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
 
-	err = mayaConfig.MayaService.DeleteVolume(mayaConfig.GetURL(), req.VolumeId)
+	err = mayaConfig.MayaService.DeleteVolume(&mayaConfig.MapiURI, req.VolumeId)
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, err.Error())
 	}
@@ -215,7 +215,7 @@ func (cs *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
-	volumes, err := mayaConfig.MayaService.ListAllVolumes(mayaConfig.GetURL())
+	volumes, err := mayaConfig.MayaService.ListAllVolumes(&mayaConfig.MapiURI)
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}

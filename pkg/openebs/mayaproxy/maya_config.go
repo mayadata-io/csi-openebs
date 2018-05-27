@@ -13,6 +13,7 @@ import (
 	"errors"
 )
 
+// logic is separated into interfaces which makes testing easier
 type MayaApiService interface {
 	GetMayaClusterIP(client kubernetes.Interface) (string, error)
 	CreateVolume(mapiURI *url.URL, spec mayav1.VolumeSpec) error
@@ -34,6 +35,7 @@ type Builder interface {
 type MayaConfigBuilder struct {
 	Builder
 }
+
 type K8sClient struct {
 	K8sClientService
 }
@@ -56,17 +58,8 @@ type MayaService struct {
 	MayaApiService
 }
 
-func (mayaConfig MayaConfig) GetURL() *url.URL {
-	return &mayaConfig.MapiURI
-}
-
-func (mayaConfig MayaConfig) GetNamespace() string {
-	return mayaConfig.Namespace
-}
-
+// getK8sClient create an InClusterConfig and use it to create a client for the controller to use to communicate with Kubernetes
 func (k8sClient K8sClient) getK8sClient() (*kubernetes.Clientset, error) {
-	// Create an InClusterConfig and use it to create a client for the controller
-	// to use to communicate with Kubernetes
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		glog.Errorf("Failed to create config: %v", err)
@@ -81,15 +74,12 @@ func (k8sClient K8sClient) getK8sClient() (*kubernetes.Clientset, error) {
 	return client, nil
 }
 
+// getSvcObject is a wrapper which uses kubernetes functions to get a k8s service object
 func (k8sClient K8sClient) getSvcObject(client *kubernetes.Clientset, namespace string) (*v1.Service, error) {
 	return client.CoreV1().Services(namespace).Get(mayaApiServerService, metav1.GetOptions{})
 }
 
-/*
-Using a pointer receiver. This reduces chances of object tossing
-from one method to another and makes testing easier.The callee
-must check for error before proceeding to use MayaConfig
-*/
+// SetupMayaConfig initializes mayaConfig object with mapi server url etc
 func (mayaConfig *MayaConfig) SetupMayaConfig(k8sClient K8sClientService) error {
 
 	// setup Namespace
@@ -123,6 +113,7 @@ func (mayaConfig *MayaConfig) SetupMayaConfig(k8sClient K8sClientService) error 
 	return nil
 }
 
+// GetNewMayaConfig creates an object of MayaConfig and calls setup method on it
 func (builder MayaConfigBuilder) GetNewMayaConfig(clientWrapper *K8sClientWrapper) (*MayaConfig, error) {
 	if clientWrapper == nil {
 		clientWrapper = &K8sClientWrapper{ClientService: K8sClient{}}
