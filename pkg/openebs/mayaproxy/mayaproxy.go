@@ -13,7 +13,7 @@ import (
 )
 
 // CreateVolume requests mapi server to create an openebs volume. It returns an error if volume creation fails
-func (mayaService MayaService) CreateVolume(mapiURI *url.URL, spec mayav1.VolumeSpec) error {
+func (mayaService *MayaService) CreateVolume(mapiURI *url.URL, spec mayav1.VolumeSpec) error {
 	// Marshal serializes the value provided into a YAML document
 	yamlValue, _ := yaml.Marshal(spec)
 
@@ -46,10 +46,11 @@ func (mayaService MayaService) CreateVolume(mapiURI *url.URL, spec mayav1.Volume
 	code := resp.StatusCode
 	if code != http.StatusOK {
 		glog.Errorf("Error response from maya-apiserver: %v", http.StatusText(code))
-		return errors.New("Error response from maya-apiserver")
+		return errors.New("error response from maya-apiserver")
 	}
 
-	glog.Infof("volume Successfully Created:\n%v\n", string(data))
+	responseBody := string(data)
+	glog.Infof("volume Successfully Created:\n%v\n", responseBody)
 	return nil
 }
 
@@ -76,8 +77,12 @@ func (mayaService *MayaService) DeleteVolume(mapiURI *url.URL, volumeName string
 
 	code := resp.StatusCode
 	if code != http.StatusOK {
+		// is it not found? then no worry. Volume is already deleted
+		if code == 404 {
+			return nil
+		}
 		glog.Errorf("HTTP Status error from maya-apiserver: %v\n", http.StatusText(code))
-		return err
+		return errors.New(http.StatusText(code))
 	}
 	glog.Info("volume Deletion Successfully initiated")
 	return nil
@@ -96,6 +101,7 @@ func (mayaService *MayaService) GetVolume(mapiURI *url.URL, volumeName string) (
 	glog.Infof("[DEBUG] Requesting for volume details at %s", url.String())
 
 	resp, err := reqVolume(url)
+	// What to do if error is 404 i.e volume does not exist?
 	if err != nil {
 		return nil, err
 	}

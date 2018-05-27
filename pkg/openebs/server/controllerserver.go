@@ -193,7 +193,7 @@ func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 
 	err = mayaConfig.MayaService.DeleteVolume(mayaConfig.GetURL(), req.VolumeId)
 	if err != nil {
-		// TODO: Handle volume delete error
+		return nil, status.Error(codes.Unavailable, err.Error())
 	}
 
 	return &csi.DeleteVolumeResponse{}, nil

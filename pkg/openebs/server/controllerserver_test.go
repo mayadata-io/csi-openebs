@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"k8s.io/client-go/kubernetes"
+	"strings"
 )
 
 const (
@@ -119,10 +120,17 @@ const (
 )
 
 var (
+	// controller object to call functions
+	controller ControllerServer
+
+	// internal error from maya api server
+	err error
+
 	// vars to switch behaviour of method i.e. respond with error or no error
 	countGetVolume    int
 	countListVolumes  int
 	countCreateVolume int
+	countDeleteVolume int
 
 	// default valid values
 	mapiURI   *url.URL
@@ -178,6 +186,8 @@ func resetToDefault() {
 // initial setup of mocked objects
 func init() {
 	resetToDefault()
+	err = errors.New("HTTP Status error from maya-apiserver: Internal Server Error")
+	controller = ControllerServer{}
 }
 
 // getMayaVolume will return an object of mayav1.Volume filling its Annotations with jsonMap
@@ -238,6 +248,13 @@ func (mMayaService MockMayaService) CreateVolume(mapiURI *url.URL, spec mayav1.V
 	}
 	countCreateVolume++
 	return errors.New("http error")
+}
+func (mMayaService MockMayaService) DeleteVolume(mapiURI *url.URL, volumeName string) error {
+	if countDeleteVolume > 0 {
+		return nil
+	}
+	countDeleteVolume++
+	return errors.New("")
 }
 
 func (mK8sClient MockK8sClient) getK8sClient() (*kubernetes.Clientset, error) {
@@ -357,7 +374,6 @@ func TestCreateVolume(t *testing.T) {
 		Parameters: map[string]string{"storage-class-name": "openebs"},
 		CapacityRange: &csi.CapacityRange{RequiredBytes: 10000000000},
 	}
-	controller := ControllerServer{}
 	resp, err := controller.CreateVolume(context.Background(), req)
 
 	if err == nil {
@@ -400,14 +416,9 @@ func TestCreateVolume(t *testing.T) {
 
 func TestListVolumes(t *testing.T) {
 	defer resetToDefault()
-	// setup the vars in controllerserver to our mocking structs
-	mayaConfigBuilder = builder
-	wrapper := &mayaproxy.K8sClientWrapper{ClientService: mK8sClient}
-	clientWrapper = wrapper
 
 	// create an empty reqest
 	req := &csi.ListVolumesRequest{}
-	controller := ControllerServer{}
 	res, err := controller.ListVolumes(context.Background(), req)
 	if err == nil {
 		t.Errorf("internal server error from mapi server should cause ListVolumes to fail")
@@ -431,5 +442,39 @@ func TestListVolumes(t *testing.T) {
 
 func TestDeleteVolume(t *testing.T) {
 	defer resetToDefault()
+	req := &csi.DeleteVolumeRequest{}
+	_, err = controller.DeleteVolume(context.Background(), req)
+	if err == nil {
+		t.Errorf("expected error when volume could not be deleted at mapi server")
+	}
 
+	_, err := controller.DeleteVolume(context.Background(), req)
+	if err != nil {
+		t.Errorf("expected no error when volume is successfully deleted at mapi server")
+	}
+
+}
+
+func TestControllerPublishVolume(t *testing.T) {
+	req := &csi.ControllerPublishVolumeRequest{}
+	_, err := controller.ControllerPublishVolume(context.Background(), req)
+	if err == nil || !strings.Contains(err.Error(), "Unimplemented") {
+		t.Errorf("expected error 12: Unimplemented got %s", err)
+	}
+}
+
+func TestControllerUnpublishVolume(t *testing.T) {
+	req := &csi.ControllerUnpublishVolumeRequest{}
+	_, err := controller.ControllerUnpublishVolume(context.Background(), req)
+	if err == nil || !strings.Contains(err.Error(), "Unimplemented") {
+		t.Errorf("expected error 12: Unimplemented got %s", err)
+	}
+}
+
+func TestGetCapacity(t *testing.T) {
+	req := &csi.GetCapacityRequest{}
+	_, err := controller.GetCapacity(context.Background(), req)
+	if err == nil || !strings.Contains(err.Error(), "Unimplemented") {
+		t.Errorf("expected error 12: Unimplemented got %s", err)
+	}
 }
