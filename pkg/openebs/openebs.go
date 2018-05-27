@@ -45,8 +45,6 @@ func GetOpenEbsDriver() *openEbs {
 }
 
 func (oe *openEbs) Run(nodeID, endpoint string) {
-	glog.Infof("Driver: %v ", driverName)
-
 	// Initialize with default driver
 	oe.driver = driver.NewCSIDriver(driverName, version, nodeID)
 	if oe.driver == nil {

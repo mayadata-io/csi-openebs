@@ -19,9 +19,6 @@ package server
 import (
 	"github.com/princerachit/csi-openebs/pkg/openebs/driver"
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
-	"github.com/golang/glog"
-	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/codes"
 	"context"
 )
 
@@ -30,18 +27,7 @@ type IdentityServer struct {
 	Driver *driver.CSIDriver
 }
 
-
 func (ids *IdentityServer) GetPluginInfo(ctx context.Context, req *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
-	glog.V(5).Infof("Using default GetPluginInnfo")
-
-	if ids.Driver.Name == "" {
-		return nil, status.Error(codes.Unavailable, "Driver name not configured")
-	}
-
-	if ids.Driver.Version == "" {
-		return nil, status.Error(codes.Unavailable, "Driver is missing version")
-	}
-
 	return &csi.GetPluginInfoResponse{
 		Name:          ids.Driver.Name,
 		VendorVersion: ids.Driver.Version,
@@ -53,7 +39,6 @@ func (ids *IdentityServer) Probe(ctx context.Context, req *csi.ProbeRequest) (*c
 }
 
 func (ids *IdentityServer) GetPluginCapabilities(ctx context.Context, req *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
-	glog.V(5).Infof("Using default capabilities")
 	return &csi.GetPluginCapabilitiesResponse{
 		Capabilities: []*csi.PluginCapability{
 			{
