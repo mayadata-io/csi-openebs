@@ -19,8 +19,8 @@ package openebs
 import (
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"github.com/golang/glog"
-	"github.com/princerachit/csi-openebs/pkg/openebs/driver"
-	"github.com/princerachit/csi-openebs/pkg/openebs/server"
+	"github.com/openebs/csi-openebs/pkg/openebs/driver"
+	"github.com/openebs/csi-openebs/pkg/openebs/server"
 )
 
 type openEbs struct {

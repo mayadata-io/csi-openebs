@@ -17,7 +17,7 @@ limitations under the License.
 package server
 
 import (
-	"github.com/princerachit/csi-openebs/pkg/openebs/driver"
+	"github.com/openebs/csi-openebs/pkg/openebs/driver"
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"context"
 )

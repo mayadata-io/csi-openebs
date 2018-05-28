@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net"
 	"testing"
-	mayav1 "github.com/princerachit/csi-openebs/pkg/openebs/v1"
+	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
 	"io/ioutil"
 	"strings"
 )

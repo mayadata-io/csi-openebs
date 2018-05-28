@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/princerachit/csi-openebs/pkg/openebs/driver"
+	"github.com/openebs/csi-openebs/pkg/openebs/driver"
 )
 
 type NodeServer struct {

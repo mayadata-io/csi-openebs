@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"bytes"
 	"io/ioutil"
-	mayav1 "github.com/princerachit/csi-openebs/pkg/openebs/v1"
+	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
 	"gopkg.in/yaml.v2"
 	"errors"
 	"net/url"

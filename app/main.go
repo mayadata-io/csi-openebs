@@ -18,7 +18,7 @@ package main
 import (
 	"flag"
 	"os"
-	"github.com/princerachit/csi-openebs/pkg/openebs"
+	"github.com/openebs/csi-openebs/pkg/openebs"
 )
 
 func init() {

@@ -12,19 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-REGISTRY_NAME=quay.io/k8scsi
-IMAGE_NAME=hostpathplugin
-IMAGE_VERSION=canary
-IMAGE_TAG=$(REGISTRY_NAME)/$(IMAGE_NAME):$(IMAGE_VERSION)
-
-.PHONY: openebs 
-
+.PHONY: openebs
 
 test:
-	go test github.com/kubernetes-csi/drivers/pkg/... -cover
-	go vet github.com/kubernetes-csi/drivers/pkg/...
-push: hostpath-container
-	docker push $(IMAGE_TAG)
+	go test github.com/openebs/csi-openebs/pkg/... -cover
+	go vet github.com/openebs/csi-openebs/pkg/...
 openebs:
 	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi
 	CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' -o _output/openebs ./app
