@@ -30,6 +30,19 @@ type NodeServer struct {
 	Driver *driver.CSIDriver
 }
 
+type ISCSIManager struct {
+	iscsiService ISCSIService
+}
+
+type ISCSIService interface {
+	AttachDisk(b iscsiDiskMounter) (string, error)
+	DetachDisk(c iscsiDiskUnmounter, targetPath string) error
+}
+
+var (
+	iscsiManager = ISCSIManager{iscsiService: &ISCSIUtil{}}
+)
+
 func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	iscsiInfo, err := getISCSIInfo(req)
 	if err != nil {
@@ -37,8 +50,7 @@ func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	}
 	diskMounter := getISCSIDiskMounter(iscsiInfo, req)
 
-	util := &ISCSIUtil{}
-	_, err = util.AttachDisk(*diskMounter)
+	_, err = iscsiManager.iscsiService.AttachDisk(*diskMounter)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -50,8 +62,7 @@ func (ns *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	diskUnmounter := getISCSIDiskUnmounter(req)
 	targetPath := req.GetTargetPath()
 
-	iscsiutil := &ISCSIUtil{}
-	err := iscsiutil.DetachDisk(*diskUnmounter, targetPath)
+	err := iscsiManager.iscsiService.DetachDisk(*diskUnmounter, targetPath)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
