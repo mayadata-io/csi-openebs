@@ -10,7 +10,6 @@ import (
 	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
 	"os"
 	"fmt"
-	"errors"
 )
 
 // logic is separated into interfaces which makes testing easier
@@ -86,30 +85,28 @@ func (mayaConfig *MayaConfig) SetupMayaConfig(k8sClient K8sClientService) error 
 	if mayaConfig.Namespace = os.Getenv("OPENEBS_NAMESPACE"); mayaConfig.Namespace == "" {
 		mayaConfig.Namespace = "default"
 	}
-	glog.Info("OpenEBS volume provisioner Namespace ", mayaConfig.Namespace)
+	glog.V(3).Info("OpenEBS volume plugin namespace ", mayaConfig.Namespace)
 
 	client, err := k8sClient.getK8sClient()
 	if err != nil {
-		return errors.New("error creating kubernetes clientset")
+		return err
 	}
 
 	// setup MapiURI using the Maya API Server Service
 	svc, err := k8sClient.getSvcObject(client, mayaConfig.Namespace)
 	if err != nil {
-		glog.Errorf("Error getting maya-apiserver IP Address: %v", err)
-		return errors.New("error creating kubernetes clientset")
+		glog.Errorf("Error getting maya-apiserver service object: ", err)
+		return err
 	}
+	glog.V(4).Infof("Maya apiserver spec %v", svc)
 
-	// Remove the hardcoding of port index
 	mapiUrl, err := url.Parse("http://" + svc.Spec.ClusterIP + ":" + fmt.Sprintf("%d", svc.Spec.Ports[0].Port))
-	glog.V(2).Infof("Maya apiserver spec %v", svc)
 	if err != nil {
 		glog.Errorf("Could not parse maya-apiserver server url: %v", err)
 		return err
 	}
 	mayaConfig.MapiURI = *mapiUrl
-	glog.V(2).Infof("Maya Cluster IP: %v", mayaConfig.MapiURI)
-	glog.V(2).Infof("Host: %v Scheme: %v Path: %v", mayaConfig.MapiURI.Host, mayaConfig.MapiURI.Scheme, mayaConfig.MapiURI.Path)
+	glog.V(3).Infof("Maya Cluster IP: %v", mayaConfig.MapiURI)
 	return nil
 }
 

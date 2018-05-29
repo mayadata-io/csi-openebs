@@ -17,11 +17,7 @@ limitations under the License.
 package driver
 
 import (
-	"fmt"
 	"github.com/golang/glog"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 )
 
@@ -60,19 +56,6 @@ func NewCSIDriver(name string, v string, nodeID string) *CSIDriver {
 	return &driver
 }
 
-func (d *CSIDriver) ValidateControllerServiceRequest(c csi.ControllerServiceCapability_RPC_Type) error {
-	if c == csi.ControllerServiceCapability_RPC_UNKNOWN {
-		return nil
-	}
-
-	for _, cap := range d.cap {
-		if c == cap.GetRpc().GetType() {
-			return nil
-		}
-	}
-	return status.Error(codes.InvalidArgument, fmt.Sprintf("%s", c))
-}
-
 func (d *CSIDriver) AddControllerServiceCapabilities(cl []csi.ControllerServiceCapability_RPC_Type) {
 	var csc []*csi.ControllerServiceCapability
 
@@ -104,10 +87,6 @@ func (d *CSIDriver) AddVolumeCapabilityAccessModes(vc []csi.VolumeCapability_Acc
 	}
 	d.vc = vca
 	return vca
-}
-
-func (d *CSIDriver) GetVolumeCapabilityAccessModes() []*csi.VolumeCapability_AccessMode {
-	return d.vc
 }
 
 func (d *CSIDriver) GetControllerServiceCapability() []*csi.ControllerServiceCapability {

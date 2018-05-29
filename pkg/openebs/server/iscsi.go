@@ -26,6 +26,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// getISCSIInfo extracts and fills disk information from NodePublishVolumeRequest to iscsiDisk
 func getISCSIInfo(req *csi.NodePublishVolumeRequest) (*iscsiDisk, error) {
 	volName := req.GetVolumeId()
 	tp := req.GetVolumeAttributes()["targetPortal"]
@@ -76,6 +77,7 @@ func getISCSIInfo(req *csi.NodePublishVolumeRequest) (*iscsiDisk, error) {
 		InitiatorName:  initiatorName}, nil
 }
 
+// getISCSIDiskMounter returns iscsiDiskMounter composed of info from iscsiDisk and NodePublishVolumeRequest
 func getISCSIDiskMounter(iscsiInfo *iscsiDisk, req *csi.NodePublishVolumeRequest) *iscsiDiskMounter {
 	readOnly := req.GetReadonly()
 	fsType := req.GetVolumeCapability().GetMount().GetFsType()
@@ -93,6 +95,7 @@ func getISCSIDiskMounter(iscsiInfo *iscsiDisk, req *csi.NodePublishVolumeRequest
 	}
 }
 
+// getISCSIDiskUnmounter returns iscsiDiskUnmounter
 func getISCSIDiskUnmounter(req *csi.NodeUnpublishVolumeRequest) *iscsiDiskUnmounter {
 	return &iscsiDiskUnmounter{
 		iscsiDisk: &iscsiDisk{
@@ -103,6 +106,7 @@ func getISCSIDiskUnmounter(req *csi.NodeUnpublishVolumeRequest) *iscsiDiskUnmoun
 	}
 }
 
+// portalMounter adds default port to given portal if missing
 func portalMounter(portal string) string {
 	if !strings.Contains(portal, ":") {
 		portal = portal + ":3260"
@@ -110,6 +114,7 @@ func portalMounter(portal string) string {
 	return portal
 }
 
+// parseSecret parses secret into a map
 func parseSecret(secretParams string) map[string]string {
 	var secret map[string]string
 	if err := json.Unmarshal([]byte(secretParams), &secret); err != nil {

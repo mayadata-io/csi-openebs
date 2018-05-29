@@ -22,11 +22,13 @@ import (
 	"context"
 )
 
+// IdentityServer implements csi.IdentityServer interface
 type IdentityServer struct {
 	csi.IdentityServer
 	Driver *driver.CSIDriver
 }
 
+// GetPluginInfo returns Name and version of plugin
 func (ids *IdentityServer) GetPluginInfo(ctx context.Context, req *csi.GetPluginInfoRequest) (*csi.GetPluginInfoResponse, error) {
 	return &csi.GetPluginInfoResponse{
 		Name:          ids.Driver.Name,
@@ -34,10 +36,13 @@ func (ids *IdentityServer) GetPluginInfo(ctx context.Context, req *csi.GetPlugin
 	}, nil
 }
 
+// Probe tests if plugin is healthy.
+// OpenEBS plugin does a lazy intialization of mayaConfig therefore probe is always successful
 func (ids *IdentityServer) Probe(ctx context.Context, req *csi.ProbeRequest) (*csi.ProbeResponse, error) {
 	return &csi.ProbeResponse{}, nil
 }
 
+// GetPluginCapabilities returns plugin capabilities
 func (ids *IdentityServer) GetPluginCapabilities(ctx context.Context, req *csi.GetPluginCapabilitiesRequest) (*csi.GetPluginCapabilitiesResponse, error) {
 	return &csi.GetPluginCapabilitiesResponse{
 		Capabilities: []*csi.PluginCapability{

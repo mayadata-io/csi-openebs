@@ -286,9 +286,10 @@ func (cs *ControllerServer) ControllerGetCapabilities(ctx context.Context, req *
 
 // ValidateVolumeCapabilities is used to validate volume's capabilities
 func (cs *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
-	vCaps := req.VolumeCapabilities
-	for _, vCap := range vCaps {
-		if vCap
+	for _, vCap := range req.VolumeCapabilities {
+		if vCap.AccessMode.GetMode() != csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER {
+			return &csi.ValidateVolumeCapabilitiesResponse{Supported: false, Message: ""}, nil
+		}
 	}
-	return &csi.ValidateVolumeCapabilitiesResponse{}, nil
+	return &csi.ValidateVolumeCapabilitiesResponse{Supported: true, Message: ""}, nil
 }

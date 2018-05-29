@@ -6,6 +6,10 @@ import (
 	"context"
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"errors"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
+	"fmt"
 )
 
 var (
@@ -14,11 +18,11 @@ var (
 
 const (
 	volume1 = "csi-volume-1"
-	volume2 = "csi-volume-2"
 )
 
 func init() {
 	iscsiManager = ISCSIManager{iscsiService: &MockISCSIService{}}
+
 }
 
 type MockISCSIService struct {
@@ -26,10 +30,10 @@ type MockISCSIService struct {
 }
 
 func (util *MockISCSIService) AttachDisk(b iscsiDiskMounter) (string, error) {
-	if b.VolName == "csi-volume-1" {
+	if b.targetPath == "/mount/path" {
 		return "", nil
 	}
-	return "", errors.New("error in mounting path")
+	return "", errors.New(fmt.Sprintf("iscsi: failed to mkdir %s, error", b.targetPath))
 }
 
 func (util *MockISCSIService) DetachDisk(c iscsiDiskUnmounter, targetPath string) error {
@@ -37,98 +41,128 @@ func (util *MockISCSIService) DetachDisk(c iscsiDiskUnmounter, targetPath string
 		return nil
 
 	}
-	return errors.New("targetPath " + targetPath + "path not found")
+	return errors.New("Warning: Unmount skipped because path does not exist: " + targetPath)
 }
 
 func TestNodePublishVolume(t *testing.T) {
-	attributes := make(map[string]string)
-	attributes["targetPortal"] = "192.168.10.25"
-	attributes["iqn"] = "iqn.2016-09.com.openebs.jiva:pvc-84bbb63f-6001-11e8-8a85-42010a8e0002"
-	attributes["lun"] = "0"
-	attributes["portals"] = "[\"10.103.7.228:3260\"]"
-	attributes["iscsiInterface"] = "default"
-	attributes["initiatorName"] = "openebs-vm"
+	// Volume attributes with complete information
+	attributesComplete := make(map[string]string)
+	attributesComplete["targetPortal"] = "192.168.10.25"
+	attributesComplete["iqn"] = "iqn.2016-09.com.openebs.jiva:pvc-84bbb63f-6001-11e8-8a85-42010a8e0002"
+	attributesComplete["lun"] = "0"
+	attributesComplete["portals"] = "[\"10.103.7.228:3260\"]"
+	attributesComplete["iscsiInterface"] = "default"
+	attributesComplete["initiatorName"] = "openebs-vm"
 
-	_, err := ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: volume1,
-		TargetPath: "/mount/path",
-		VolumeAttributes: attributes,
-		Readonly: true})
+	testCases := map[string]struct {
+		req *csi.NodePublishVolumeRequest
+		err error
+	}{
+		"success": {&csi.NodePublishVolumeRequest{VolumeId: volume1,
+			TargetPath: "/mount/path",
+			VolumeAttributes: attributesComplete,
+			Readonly: true}, nil},
 
-	if err != nil {
-		t.Errorf("error in volume publish")
+		"mountFailure": {&csi.NodePublishVolumeRequest{VolumeId: volume1,
+			TargetPath: "/wrong/mount/path",
+			VolumeAttributes: attributesComplete,
+			Readonly: true}, status.Error(codes.Internal, "iscsi: failed to mkdir /wrong/mount/path, error")},
+
+		"missingTargetInformationFailure": {&csi.NodePublishVolumeRequest{VolumeId: volume1,
+			TargetPath: "/mount/path",
+			VolumeAttributes: make(map[string]string),
+			Readonly: true}, status.Error(codes.Internal, "iSCSI target information is missing")},
 	}
 
-	_, err = ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: volume2,
-		TargetPath: "/mount/path",
-		VolumeAttributes: attributes,
-		Readonly: true})
-
-	if err == nil {
-		t.Errorf("mount failure should cause volume publish call failure")
-	}
-
-	// remove target portal
-	delete(attributes, "targetPortal")
-
-	_, err = ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: volume1,
-		TargetPath: "/mount/path",
-		VolumeAttributes: attributes,
-		Readonly: true})
-
-	if err == nil {
-		t.Errorf("missing targetPortal should cause volume publish failure")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			_, err := ns.NodePublishVolume(context.Background(), v.req)
+			assert.Equal(t, err, v.err)
+		})
 	}
 
 }
 
 func TestNodeUnpublishVolume(t *testing.T) {
-	nodeUnpublishVolumeRequest := &csi.NodeUnpublishVolumeRequest{TargetPath: "/mountexist", VolumeId: volume1,}
-	_, err := ns.NodeUnpublishVolume(context.Background(), nodeUnpublishVolumeRequest)
-
-	if err != nil {
-		t.Errorf("volume unpublish failed")
+	testCases := map[string]struct {
+		req *csi.NodeUnpublishVolumeRequest
+		err error
+	}{
+		"success": {&csi.NodeUnpublishVolumeRequest{TargetPath: "/mountexist", VolumeId: volume1,}, nil},
+		"failure": {&csi.NodeUnpublishVolumeRequest{TargetPath: "/mountmissing", VolumeId: volume1,}, status.Error(13, "Warning: Unmount skipped because path does not exist: /mountmissing")},
 	}
 
-	nodeUnpublishVolumeRequest = &csi.NodeUnpublishVolumeRequest{TargetPath: "/mountmissing", VolumeId: volume1,}
-	_, err = ns.NodeUnpublishVolume(context.Background(), nodeUnpublishVolumeRequest)
-
-	if err == nil {
-		t.Errorf("volume unpublish failure should cause failure")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			_, err := ns.NodeUnpublishVolume(context.Background(), v.req)
+			assert.Equal(t, err, v.err)
+		})
 	}
 }
 
 func TestNodeStageVolume(t *testing.T) {
-	_, err := ns.NodeStageVolume(context.Background(), &csi.NodeStageVolumeRequest{})
-	if err != nil {
-		t.Errorf("nodeStageVolume should not return error")
+	testCases := map[string]struct {
+		req *csi.NodeStageVolumeRequest
+		err error
+	}{
+		"failure": {&csi.NodeStageVolumeRequest{}, status.Error(codes.Unimplemented, "")},
+	}
+
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			_, err := ns.NodeStageVolume(context.Background(), v.req)
+			assert.Equal(t, err, v.err)
+		})
 	}
 }
 
 func TestNodeUnstageVolume(t *testing.T) {
-	_, err := ns.NodeUnstageVolume(context.Background(), &csi.NodeUnstageVolumeRequest{})
-	if err != nil {
-		t.Errorf("nodeUnstageVolume should not return error")
+	testCases := map[string]struct {
+		req *csi.NodeUnstageVolumeRequest
+		err error
+	}{
+		"failure": {&csi.NodeUnstageVolumeRequest{}, status.Error(codes.Unimplemented, "")},
+	}
+
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			_, err := ns.NodeUnstageVolume(context.Background(), v.req)
+			assert.Equal(t, err, v.err)
+		})
 	}
 }
 
-func TestNodeGetId(t *testing.T) {
-	resp, err := ns.NodeGetId(context.Background(), &csi.NodeGetIdRequest{})
-	if err != nil {
-		t.Errorf("error in getting node ID")
+func
+TestNodeGetId(t *testing.T) {
+	testCases := map[string]struct {
+		req *csi.NodeGetIdRequest
+	}{
+		"success": {&csi.NodeGetIdRequest{}},
 	}
 
-	if resp.NodeId != "node-1" {
-		t.Errorf("wrong node ID")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			resp, err := ns.NodeGetId(context.Background(), v.req)
+			assert.Nil(t, err)
+			assert.Equal(t, "node-1", resp.NodeId)
+		})
 	}
 }
 
-func TestNodeNodeGetCapabilities(t *testing.T) {
-	resp, err := ns.NodeGetCapabilities(context.Background(), &csi.NodeGetCapabilitiesRequest{})
-	if err != nil {
-		t.Errorf("error in getting node ID")
+func
+TestNodeGetCapabilities(t *testing.T) {
+	testCases := map[string]struct {
+		req *csi.NodeGetCapabilitiesRequest
+	}{
+		"success": {&csi.NodeGetCapabilitiesRequest{}},
 	}
 
-	if len(resp.Capabilities) != 1 || resp.Capabilities[0].GetRpc().GetType() != csi.NodeServiceCapability_RPC_UNKNOWN {
-		t.Errorf("wrong node capabilities")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			resp, err := ns.NodeGetCapabilities(context.Background(), v.req)
+			assert.Nil(t, err)
+			assert.Equal(t, len(resp.Capabilities), 1)
+			assert.Equal(t, csi.NodeServiceCapability_RPC_UNKNOWN, resp.Capabilities[0].GetRpc().GetType())
+		})
 	}
 }

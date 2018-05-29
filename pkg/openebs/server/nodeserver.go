@@ -23,8 +23,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/openebs/csi-openebs/pkg/openebs/driver"
+	"github.com/golang/glog"
 )
 
+// NodeServer implements csi.NodeServer interface
 type NodeServer struct {
 	csi.NodeServer
 	Driver *driver.CSIDriver
@@ -43,47 +45,57 @@ var (
 	iscsiManager = ISCSIManager{iscsiService: &ISCSIUtil{}}
 )
 
+// NodePublishVolume publishes the openebs volume.
 func (ns *NodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	iscsiInfo, err := getISCSIInfo(req)
+	glog.V(4).Infof("iscsiInfo: %v", iscsiInfo)
 	if err != nil {
+		glog.Errorf("Failed to get iscsiInfo: %s", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	diskMounter := getISCSIDiskMounter(iscsiInfo, req)
-
+	glog.V(4).Infof("diskMounter: %v", diskMounter)
 	_, err = iscsiManager.iscsiService.AttachDisk(*diskMounter)
 	if err != nil {
+		glog.Errorf("Failed to attach disk: %s", err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
+// NodeUnpublishVolume unpublishes the openebs volume.
 func (ns *NodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	diskUnmounter := getISCSIDiskUnmounter(req)
+	glog.V(4).Infof("diskUnmounter: %v", diskUnmounter)
 	targetPath := req.GetTargetPath()
 
 	err := iscsiManager.iscsiService.DetachDisk(*diskUnmounter, targetPath)
 	if err != nil {
+		glog.Errorf("Failed to detach disk from at %s: %s", targetPath, err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
+// NodeStageVolume is unimplemented
 func (ns *NodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
-	return &csi.NodeStageVolumeResponse{}, nil
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
+// NodeUnstageVolume is unimplemented
 func (ns *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
-	return &csi.NodeUnstageVolumeResponse{}, nil
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
+// NodeGetId returns the node ID
 func (ns *NodeServer) NodeGetId(ctx context.Context, req *csi.NodeGetIdRequest) (*csi.NodeGetIdResponse, error) {
 	return &csi.NodeGetIdResponse{NodeId: ns.Driver.NodeID,}, nil
 }
 
+// NodeGetCapabilities returns unknown capability
 func (ns *NodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
-
 	return &csi.NodeGetCapabilitiesResponse{
 		Capabilities: []*csi.NodeServiceCapability{
 			{

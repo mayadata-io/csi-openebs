@@ -162,6 +162,7 @@ var (
 // initializes to default mocking values
 // this method can be called after end of every test functions
 func resetToDefault() {
+
 	countGetVolume = 0
 	countListVolumes = 0
 	countCreateVolume = 0
