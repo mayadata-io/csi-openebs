@@ -97,10 +97,10 @@
   version = "1.0.1"
 
 [[projects]]
-  name = "github.com/kubernetes-incubator/external-storage"
-  packages = ["openebs/types/v1"]
-  revision = "7e0dccd17dd6e830508d0c5f563d853793e0c0d6"
-  version = "1.8.1"
+  branch = "master"
+  name = "github.com/kubernetes-csi/drivers"
+  packages = ["pkg/csi-common","pkg/iscsi"]
+  revision = "ecd4460a912e590709f74efb92b2fb40533aa69e"
 
 [[projects]]
   name = "github.com/matttproud/golang_protobuf_extensions"
@@ -175,14 +175,8 @@
   version = "v1.0.0"
 
 [[projects]]
-  name = "github.com/stretchr/objx"
-  packages = ["."]
-  revision = "facf9a85c22f48d2f52f2380e4efce1768749a89"
-  version = "v0.1"
-
-[[projects]]
   name = "github.com/stretchr/testify"
-  packages = ["assert","mock"]
+  packages = ["assert"]
   revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
   version = "v1.2.1"
 
@@ -291,6 +285,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bbfd0326a28887d561229bd77e8fd06b68f8fe7abae389fde68239b9b81fd06e"
+  inputs-digest = "45fc9a656ad7ce50ea655c857784e9b69402cb7467495b88ff6a0ce2352f92f4"
   solver-name = "gps-cdcl"
   solver-version = 1

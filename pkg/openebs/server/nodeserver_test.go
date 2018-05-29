@@ -12,6 +12,11 @@ var (
 	ns = NodeServer{Driver: &driver.CSIDriver{Name: "csi-openebs", NodeID: "node-1", Version: "0.0.1"}}
 )
 
+const (
+	volume1 = "csi-volume-1"
+	volume2 = "csi-volume-2"
+)
+
 func init() {
 	iscsiManager = ISCSIManager{iscsiService: &MockISCSIService{}}
 }
@@ -44,7 +49,7 @@ func TestNodePublishVolume(t *testing.T) {
 	attributes["iscsiInterface"] = "default"
 	attributes["initiatorName"] = "openebs-vm"
 
-	_, err := ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: "csi-volume-1",
+	_, err := ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: volume1,
 		TargetPath: "/mount/path",
 		VolumeAttributes: attributes,
 		Readonly: true})
@@ -53,7 +58,7 @@ func TestNodePublishVolume(t *testing.T) {
 		t.Errorf("error in volume publish")
 	}
 
-	_, err = ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: "csi-volume-2",
+	_, err = ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: volume2,
 		TargetPath: "/mount/path",
 		VolumeAttributes: attributes,
 		Readonly: true})
@@ -65,7 +70,7 @@ func TestNodePublishVolume(t *testing.T) {
 	// remove target portal
 	delete(attributes, "targetPortal")
 
-	_, err = ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: "csi-volume-1",
+	_, err = ns.NodePublishVolume(context.Background(), &csi.NodePublishVolumeRequest{VolumeId: volume1,
 		TargetPath: "/mount/path",
 		VolumeAttributes: attributes,
 		Readonly: true})
@@ -77,14 +82,14 @@ func TestNodePublishVolume(t *testing.T) {
 }
 
 func TestNodeUnpublishVolume(t *testing.T) {
-	nodeUnpublishVolumeRequest := &csi.NodeUnpublishVolumeRequest{TargetPath: "/mountexist", VolumeId: "csi-volume-1",}
+	nodeUnpublishVolumeRequest := &csi.NodeUnpublishVolumeRequest{TargetPath: "/mountexist", VolumeId: volume1,}
 	_, err := ns.NodeUnpublishVolume(context.Background(), nodeUnpublishVolumeRequest)
 
 	if err != nil {
 		t.Errorf("volume unpublish failed")
 	}
 
-	nodeUnpublishVolumeRequest = &csi.NodeUnpublishVolumeRequest{TargetPath: "/mountmissing", VolumeId: "csi-volume-1",}
+	nodeUnpublishVolumeRequest = &csi.NodeUnpublishVolumeRequest{TargetPath: "/mountmissing", VolumeId: volume1,}
 	_, err = ns.NodeUnpublishVolume(context.Background(), nodeUnpublishVolumeRequest)
 
 	if err == nil {

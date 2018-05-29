@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"errors"
+	"net/http"
 )
 
 var (
@@ -38,30 +39,32 @@ var (
 	mayaConfigBuilder mayaproxy.Builder
 )
 
+// ControllerServer implements csi.ControllerServer interface
 type ControllerServer struct {
 	csi.ControllerServer
 	Driver *driver.CSIDriver
 }
 
+// checkArguments validates CreateVolumeRequest
 func checkArguments(req *csi.CreateVolumeRequest) error {
 	if len(req.GetName()) == 0 {
-		return status.Error(codes.InvalidArgument, "Name missing in request")
+		return errors.New("name missing in request")
 	}
 	if req.GetVolumeCapabilities() == nil {
-		return status.Error(codes.InvalidArgument, "Volume Capabilities missing in request")
+		return errors.New("volume capabilities missing in request")
 	}
-	if req.Parameters["storage-class-name"] == "" {
-		return status.Error(codes.InvalidArgument, "Missing storage-class-name in request")
+	if req.Parameters[mayav1.StorageClassName] == "" {
+		return errors.New("missing storage-class-name in request")
 	}
 	return nil
 }
 
 // getVolumeAttributes iterates over volume's annotation and returns a map of attributes
 func getVolumeAttributes(volume *mayav1.Volume) (map[string]string, error) {
-
 	if volume == nil || volume.Metadata.Annotations == nil {
 		return nil, errors.New("volume or its annotations cannot be nil")
 	}
+
 	var iqn, targetPortal, portals, capacity string
 	var portalList []string
 	annotations := volume.Metadata.Annotations.(map[string]interface{})
@@ -71,7 +74,7 @@ func getVolumeAttributes(volume *mayav1.Volume) (map[string]string, error) {
 	// check for missing annotations
 	for _, attr := range volAttributes {
 		if annotations[attr] == nil {
-			return nil, errors.New(fmt.Sprintf("required volume attribute %s be cannot nil", attr))
+			return nil, errors.New("required volume attribute " + attr + " be cannot nil")
 		}
 	}
 
@@ -79,7 +82,7 @@ func getVolumeAttributes(volume *mayav1.Volume) (map[string]string, error) {
 	targetPortal = annotations[mayav1.OpenebsTargetPortal].(string)
 	portalList = []string{annotations[mayav1.OpenebsPortals].(string)}
 	capacity = annotations[mayav1.OpenebsCapacity].(string)
-	marshaledPortalList, _ := json.Marshal(portalList) // marshal portal list so iscsi_util can unmarshal it later
+	marshaledPortalList, _ := json.Marshal(portalList) // marshal portal list so iscsi_util.go can unmarshal it later
 
 	portals = string(marshaledPortalList)
 	// values hardcoded below. Do they need fix?
@@ -97,9 +100,9 @@ func getVolumeAttributes(volume *mayav1.Volume) (map[string]string, error) {
 func createVolumeSpec(req *csi.CreateVolumeRequest) (mayav1.VolumeSpec) {
 	volumeSpec := mayav1.VolumeSpec{}
 
-	// define size in bytes to avoid complex conversion logic
 	volumeSpec.Kind = mayav1.PersistentVolumeClaim
 	volumeSpec.APIVersion = "v1"
+	// define size in bytes to avoid complex conversion logic
 	volumeSpec.Metadata.Labels.Storage = fmt.Sprintf("%dB", req.GetCapacityRange().GetRequiredBytes())
 	volumeSpec.Metadata.Labels.StorageClass = req.Parameters[mayav1.StorageClassName]
 	volumeSpec.Metadata.Name = req.Name
@@ -110,6 +113,7 @@ func createVolumeSpec(req *csi.CreateVolumeRequest) (mayav1.VolumeSpec) {
 
 // setupPrecondition initializes mayaConfigBuilder and mayaConfig if not initialized yet
 func setupPrecondition() error {
+	glog.V(4).Infof("Initializing mayaConfig")
 	var err error
 	if mayaConfigBuilder == nil {
 		mayaConfigBuilder = mayaproxy.MayaConfigBuilder{}
@@ -124,53 +128,79 @@ func setupPrecondition() error {
 	return nil
 }
 
+// CreateVolume creates an openebs volume
 func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
+	glog.V(4).Infof("Validating CreateVolumeRequest")
 	// Check arguments
 	err := checkArguments(req)
 	if err != nil {
-		return nil, err
+		glog.Infof("Error in validating CreateVolumeRequest: ", err)
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	// initialize mayaConfig if not initialized yet
 	err = setupPrecondition()
 	if err != nil {
+		glog.Errorf("Initializing mayaConfig failed with error %s", err)
 		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
 
 	var volume *mayav1.Volume
 
-	// If volume retrieval fails then create the volume
+	glog.Infof("Pre creation check if volume %s exists", req.GetName())
 	volume, err = mayaConfig.MayaService.GetVolume(&mayaConfig.MapiURI, req.GetName())
-	glog.Infof("[DEBUG] Volume details get volume initially %s", volume)
 	if err != nil {
-		volumeSpec := createVolumeSpec(req)
+		glog.Errorf("Error in getting volume %s details", req.GetName())
+		// If volume does not exist then create volume. Otherwise return error
+		if err.Error() == http.StatusText(404) {
+			glog.Infof("Volume %s does not exist", req.GetName())
 
-		glog.Infof("Attempting to create volume")
-		err = mayaConfig.MayaService.CreateVolume(&mayaConfig.MapiURI, volumeSpec)
+			glog.V(3).Infof("Creating volume spec")
+			volumeSpec := createVolumeSpec(req)
+			glog.V(3).Infof("Volume spec created %v", volumeSpec)
 
-		if err != nil {
-			return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
+			glog.Infof("Attempting to create volume")
+			err = mayaConfig.MayaService.CreateVolume(&mayaConfig.MapiURI, volumeSpec)
+			if err != nil {
+				glog.Errorf("Error from maya-api-server: %s", err)
+				return nil, status.Error(codes.Unavailable, fmt.Sprintf("Error from maya-api-server: %s", err))
+			}
+			glog.Infof("Volume created")
+
+			// Fetch the details of created volume
+			glog.Infof("Fetching details of volume %s", req.GetName())
+			volume, err = mayaConfig.MayaService.GetVolume(&mayaConfig.MapiURI, req.GetName())
+			if err != nil {
+				glog.Errorf("Error fetching the created volume details from maya-api-server: %s", err)
+				return nil, status.Error(codes.Unavailable, fmt.Sprintf("Error fetching the created volume details from maya-api-server: %v", err))
+			}
+		} else {
+			glog.Errorf("Error from maya-api-server: %s", err)
+			return nil, status.Error(codes.Unavailable, fmt.Sprintf("Error from maya-api-server: %s", err))
 		}
 	}
 
-	volume, err = mayaConfig.MayaService.GetVolume(&mayaConfig.MapiURI, req.GetName())
-	if err != nil {
-		return nil, status.Error(codes.DeadlineExceeded, fmt.Sprintf("Unable to contact mapi server: %v", err))
-	}
-
-	glog.Infof("[DEBUG] Volume details %s", volume)
-	glog.Infof("[DEBUG] Volume metadata %v", volume.Metadata)
-
+	glog.V(3).Infof("%s volume details:\n %v", req.Name, volume)
+	glog.V(3).Infof("Extracting volume attributes")
 	attributes, err := getVolumeAttributes(volume)
 	if err != nil {
+		glog.Errorf("Extracting volume attributes failed: %s", err)
 		return nil, status.Error(codes.Internal, fmt.Sprintf("openEBS volume error: %s", err))
 	}
-	glog.Infof("attributes %v", attributes)
+	glog.V(4).Infof("Volume attributes %v", attributes)
 
 	// Extract volume size
 	capacity, err := strconv.ParseInt(strings.Split(attributes[mayav1.Capacity], "B")[0], 10, 64)
 	if err != nil {
-		glog.Errorf("invalid capacity '%s' volume found", capacity)
+		// This situation should never occur ideally
+		glog.Errorf("Invalid capacity '%s' volume found", attributes[mayav1.Capacity])
+	}
+
+	// if volume created size differs.
+	// TODO: add more validation checks and move to different function
+	if capacity != req.GetCapacityRange().GetRequiredBytes() {
+		glog.Errorf("Capacity mismatch for volume %s. Want %dB has %dB", req.GetCapacityRange().GetRequiredBytes(), capacity)
+		return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Capacity mismatch for volume %s. Want %dB has %dB", req.GetCapacityRange().GetRequiredBytes(), capacity))
 	}
 
 	return &csi.CreateVolumeResponse{
@@ -182,41 +212,47 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	}, nil
 }
 
+// DeleteVolume deletes given openebs volume
 func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
-	glog.Infof("Received request: %v", req)
 	var err error
 
 	err = setupPrecondition()
 	if err != nil {
+		glog.Errorf("Initializing mayaConfig failed with error %s", err)
 		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
 
+	glog.Infof("Attempting to delete volume", string(req.VolumeId))
 	err = mayaConfig.MayaService.DeleteVolume(&mayaConfig.MapiURI, req.VolumeId)
 	if err != nil {
-		return nil, status.Error(codes.Unavailable, err.Error())
+		glog.Errorf("Error from maya-api-server: %s", err)
+		return nil, status.Error(codes.Unavailable, fmt.Sprintf("Error from maya-api-server: %s", err))
 	}
 
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
+// ControllerPublishVolume is unimplemented
 func (cs *ControllerServer) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
+// ControllerUnpublishVolume is unimplemented
 func (cs *ControllerServer) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
+// ListVolumes lists all openebs volumes
 func (cs *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-	glog.Infof("List Volumes req received")
-
 	var err error
 	err = setupPrecondition()
 	if err != nil {
+		glog.Errorf("Initializing mayaConfig failed with error %s", err)
 		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
 	volumes, err := mayaConfig.MayaService.ListAllVolumes(&mayaConfig.MapiURI)
 	if err != nil {
+		glog.Errorf("Error from maya-api-server: %s", err)
 		return nil, status.Error(codes.Unavailable, fmt.Sprint(err))
 	}
 
@@ -226,7 +262,7 @@ func (cs *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 		if err != nil {
 			return nil, status.Error(codes.Internal, fmt.Sprintf("openEBS volume error: %s", err))
 		}
-		glog.Infof("attributes %v", attributes)
+		glog.V(4).Infof("attributes %v", attributes)
 		capacity, err := strconv.ParseInt(strings.Split(attributes[mayav1.Capacity], "B")[0], 10, 64)
 		if err != nil {
 			glog.Errorf("Invalid capacity '%s' volume found", capacity)
@@ -236,17 +272,23 @@ func (cs *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 	return &csi.ListVolumesResponse{Entries: entries}, nil
 }
 
+// GetCapacity is unimplemented
 func (cs *ControllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
+// ControllerGetCapabilities returns controller capabilities
 func (cs *ControllerServer) ControllerGetCapabilities(ctx context.Context, req *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
 	return &csi.ControllerGetCapabilitiesResponse{
 		Capabilities: cs.Driver.GetControllerServiceCapability(),
 	}, nil
 }
 
-// TODO
+// ValidateVolumeCapabilities is used to validate volume's capabilities
 func (cs *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
+	vCaps := req.VolumeCapabilities
+	for _, vCap := range vCaps {
+		if vCap
+	}
 	return &csi.ValidateVolumeCapabilitiesResponse{}, nil
 }
