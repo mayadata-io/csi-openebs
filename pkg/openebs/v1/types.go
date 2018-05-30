@@ -26,8 +26,8 @@ const (
 type VolumeSpec struct {
 	Kind       string `yaml:"kind"`
 	APIVersion string `yaml:"apiVersion"`
-	Metadata struct {
-		Name string `yaml:"name"`
+	Metadata   struct {
+		Name   string `yaml:"name"`
 		Labels struct {
 			Storage      string `yaml:"volumeprovisioner.mapi.openebs.io/storage-size"`
 			StorageClass string `yaml:"k8s.io/storage-class"`
@@ -42,7 +42,7 @@ type Volume struct {
 		AccessModes interface{} `json:"AccessModes"`
 		Capacity    interface{} `json:"Capacity"`
 		ClaimRef    interface{} `json:"ClaimRef"`
-		OpenEBS struct {
+		OpenEBS     struct {
 			VolumeID string `json:"volumeID"`
 		} `json:"OpenEBS"`
 		PersistentVolumeReclaimPolicy string `json:"PersistentVolumeReclaimPolicy"`

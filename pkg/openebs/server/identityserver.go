@@ -17,9 +17,9 @@ limitations under the License.
 package server
 
 import (
-	"github.com/openebs/csi-openebs/pkg/openebs/driver"
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"context"
+	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/openebs/csi-openebs/pkg/openebs/driver"
 )
 
 // IdentityServer implements csi.IdentityServer interface

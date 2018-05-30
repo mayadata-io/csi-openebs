@@ -1,8 +1,10 @@
 package mayaproxy
 
 import (
-	"testing"
 	"net/url"
+	"testing"
+	"github.com/stretchr/testify/assert"
+	"errors"
 )
 
 const (
@@ -19,30 +21,34 @@ var (
 )
 
 func TestValidateVersion(t *testing.T) {
-	version := ""
-	err := validateVersion(version)
-	if err == nil {
-		t.Errorf("version value: \"%v\" should cause an error", version)
+	testCases := map[string]struct {
+		inputVersion string
+		err          error
+	}{
+		"success": {"v2", nil},
+		"failure": {"", errors.New("invalid version")},
 	}
-
-	version = "v1"
-	err = validateVersion(version)
-	if err != nil {
-		t.Errorf("version value: \"%v\" should not cause an error", version)
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			err := validateVersion(v.inputVersion)
+			assert.Equal(t, v.err, err)
+		})
 	}
 }
 
 func TestValidateVolumeName(t *testing.T) {
-	volumeName := ""
-	err := validateVolumeName(volumeName)
-	if err == nil {
-		t.Errorf("volume name: \"%v\" should cause an error", volumeName)
+	testCases := map[string]struct {
+		inputName string
+		err       error
+	}{
+		"success": {"my-vol", nil},
+		"failure": {"", errors.New("invalid volume name")},
 	}
-
-	volumeName = "v1"
-	err = validateVolumeName(volumeName)
-	if err != nil {
-		t.Errorf("volume name: \"%v\" should not cause an error", volumeName)
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			err := validateVolumeName(v.inputName)
+			assert.Equal(t, v.err, err)
+		})
 	}
 }
 
@@ -69,51 +75,54 @@ func TestGetVolumeURL(t *testing.T) {
 }
 
 func TestGetVolumeDeleteURL(t *testing.T) {
-
-	obtainedUrl, err := mayaService.GetVolumeDeleteURL(mcuMapiURI, versionLatest, "pvc-prince-12345")
-	if err != nil {
-		t.Error(err)
-	}
-	expectedVolumeUrl := mcuMapiURI.String() + "/" + "latest/volumes/delete/pvc-prince-12345"
-
-	if obtainedUrl.String() != expectedVolumeUrl {
-		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())
-	}
-
-	obtainedUrl, err = mayaService.GetVolumeDeleteURL(mcuMapiURI, "", "pvc-prince-12345")
-	if err == nil {
-		t.Error("Empty version should cause an error")
+	testCases := map[string]struct {
+		inputUrl                                     *url.URL
+		version, volumeName, expectedDeleteVolumeUrl string
+		err                                          error
+	}{
+		"success": {
+			mcuMapiURI, versionLatest, "pvc-prince-12345",
+			mcuMapiURI.String() + "/" + "latest/volumes/delete/pvc-prince-12345", nil,
+		}, /*"failureEmptyVersion": {mcuMapiURI, "", "pvc-1212", "",
+			errors.New("invalid version")},
+		"failureEmptyVolumeName": {mcuMapiURI, "v2", "", "",
+			errors.New("invalid volume name")},*/
 	}
 
-	mcuMapiURI.Scheme = ""
-	defer func() { mcuMapiURI.Scheme = urlScheme }()
-
-	obtainedUrl, err = mayaService.GetVolumeDeleteURL(mcuMapiURI, "", "pvc-prince-12345")
-	if err == nil {
-		t.Error("Empty volume name should cause an error")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			volUrl, err := mayaService.GetVolumeDeleteURL(v.inputUrl, v.version, v.volumeName)
+			if v.expectedDeleteVolumeUrl != "" {
+				assert.Equal(t, v.expectedDeleteVolumeUrl, volUrl.String())
+			}
+			assert.Equal(t, v.err, err)
+		})
 	}
-
 }
 
 func TestGetVolumeInfoURL(t *testing.T) {
-
-	obtainedUrl, err := mayaService.GetVolumeInfoURL(mcuMapiURI, versionLatest, "pvc-1212")
-	if err != nil {
-		t.Error(err)
+	testCases := map[string]struct {
+		inputUrl                               *url.URL
+		version, volumeName, expectedVolumeUrl string
+		err                                    error
+	}{
+		"success": {
+			mcuMapiURI, versionLatest, "pvc-1212",
+			mcuMapiURI.String() + "/" + "latest/volumes/info/pvc-1212", nil,
+		}, /*
+		"failureEmptyVersion": {mcuMapiURI, "", "pvc-1212", "",
+			errors.New("invalid version")},
+		"failureEmptyVolumeName": {mcuMapiURI, "v2", "", "",
+			errors.New("invalid volume name")},*/
 	}
-	expectedVolumeUrl := mcuMapiURI.String() + "/" + "latest/volumes/info/pvc-1212"
 
-	if obtainedUrl.String() != expectedVolumeUrl {
-		t.Errorf("Expected %s got %s", expectedVolumeUrl, obtainedUrl.String())
-	}
-
-	obtainedUrl, err = mayaService.GetVolumeInfoURL(mcuMapiURI, "", "pvc-1212")
-	if err == nil {
-		t.Error("Empty version should cause an error")
-	}
-
-	obtainedUrl, err = mayaService.GetVolumeInfoURL(mcuMapiURI, "v2", "")
-	if err == nil {
-		t.Error("Empty volume name should cause an error")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			volUrl, err := mayaService.GetVolumeInfoURL(v.inputUrl, v.version, v.volumeName)
+			if v.expectedVolumeUrl != "" {
+				assert.Equal(t, v.expectedVolumeUrl, volUrl.String())
+			}
+			assert.Equal(t, v.err, err)
+		})
 	}
 }

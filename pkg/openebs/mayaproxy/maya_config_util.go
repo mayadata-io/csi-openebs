@@ -1,9 +1,9 @@
 package mayaproxy
 
 import (
+	"errors"
 	"net/url"
 	"strings"
-	"errors"
 	"time"
 )
 

@@ -22,8 +22,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/openebs/csi-openebs/pkg/openebs/driver"
 	"github.com/golang/glog"
+	"github.com/openebs/csi-openebs/pkg/openebs/driver"
 )
 
 // NodeServer implements csi.NodeServer interface
@@ -91,7 +91,7 @@ func (ns *NodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 
 // NodeGetId returns the node ID
 func (ns *NodeServer) NodeGetId(ctx context.Context, req *csi.NodeGetIdRequest) (*csi.NodeGetIdResponse, error) {
-	return &csi.NodeGetIdResponse{NodeId: ns.Driver.NodeID,}, nil
+	return &csi.NodeGetIdResponse{NodeId: ns.Driver.NodeID}, nil
 }
 
 // NodeGetCapabilities returns unknown capability

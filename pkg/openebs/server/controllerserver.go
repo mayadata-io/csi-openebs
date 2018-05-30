@@ -17,20 +17,20 @@ limitations under the License.
 package server
 
 import (
-	"golang.org/x/net/context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/golang/glog"
+	"github.com/openebs/csi-openebs/pkg/openebs/driver"
 	"github.com/openebs/csi-openebs/pkg/openebs/mayaproxy"
 	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
-	"github.com/golang/glog"
-	"google.golang.org/grpc/status"
+	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
-	"fmt"
-	"encoding/json"
-	"github.com/openebs/csi-openebs/pkg/openebs/driver"
+	"google.golang.org/grpc/status"
+	"net/http"
 	"strconv"
 	"strings"
-	"errors"
-	"net/http"
 )
 
 var (
@@ -48,10 +48,10 @@ type ControllerServer struct {
 // checkArguments validates CreateVolumeRequest
 func checkArguments(req *csi.CreateVolumeRequest) error {
 	if len(req.GetName()) == 0 {
-		return errors.New("name missing in request")
+		return errors.New("missing name in request")
 	}
 	if req.GetVolumeCapabilities() == nil {
-		return errors.New("volume capabilities missing in request")
+		return errors.New("missing volume capabilities in request")
 	}
 	if req.Parameters[mayav1.StorageClassName] == "" {
 		return errors.New("missing storage-class-name in request")
@@ -97,7 +97,7 @@ func getVolumeAttributes(volume *mayav1.Volume) (map[string]string, error) {
 }
 
 // createVolumeSpec returns a volume spec created from the req object
-func createVolumeSpec(req *csi.CreateVolumeRequest) (mayav1.VolumeSpec) {
+func createVolumeSpec(req *csi.CreateVolumeRequest) mayav1.VolumeSpec {
 	volumeSpec := mayav1.VolumeSpec{}
 
 	volumeSpec.Kind = mayav1.PersistentVolumeClaim
@@ -199,8 +199,8 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	// if volume created size differs.
 	// TODO: add more validation checks and move to different function
 	if capacity != req.GetCapacityRange().GetRequiredBytes() {
-		glog.Errorf("Capacity mismatch for volume %s. Want %dB has %dB", req.GetCapacityRange().GetRequiredBytes(), capacity)
-		return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Capacity mismatch for volume %s. Want %dB has %dB", req.GetCapacityRange().GetRequiredBytes(), capacity))
+		glog.Errorf("Capacity mismatch for volume %s. Want %dB has %dB", req.Name, req.GetCapacityRange().GetRequiredBytes(), capacity)
+		return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Capacity mismatch for volume %s. Want %vB has %vB", req.Name, req.GetCapacityRange().GetRequiredBytes(), capacity))
 	}
 
 	return &csi.CreateVolumeResponse{
@@ -267,7 +267,7 @@ func (cs *ControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 		if err != nil {
 			glog.Errorf("Invalid capacity '%s' volume found", capacity)
 		}
-		entries = append(entries, &csi.ListVolumesResponse_Entry{Volume: &csi.Volume{Attributes: attributes, CapacityBytes: capacity, Id: volume.Metadata.Name,}})
+		entries = append(entries, &csi.ListVolumesResponse_Entry{Volume: &csi.Volume{Attributes: attributes, CapacityBytes: capacity, Id: volume.Metadata.Name}})
 	}
 	return &csi.ListVolumesResponse{Entries: entries}, nil
 }

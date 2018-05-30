@@ -1,15 +1,15 @@
 package server
 
 import (
-	"testing"
-	"github.com/openebs/csi-openebs/pkg/openebs/driver"
 	"context"
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"errors"
-	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/codes"
 	"fmt"
+	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/openebs/csi-openebs/pkg/openebs/driver"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"testing"
 )
 
 var (
@@ -59,19 +59,19 @@ func TestNodePublishVolume(t *testing.T) {
 		err error
 	}{
 		"success": {&csi.NodePublishVolumeRequest{VolumeId: volume1,
-			TargetPath: "/mount/path",
+			TargetPath:       "/mount/path",
 			VolumeAttributes: attributesComplete,
-			Readonly: true}, nil},
+			Readonly:         true}, nil},
 
 		"mountFailure": {&csi.NodePublishVolumeRequest{VolumeId: volume1,
-			TargetPath: "/wrong/mount/path",
+			TargetPath:       "/wrong/mount/path",
 			VolumeAttributes: attributesComplete,
-			Readonly: true}, status.Error(codes.Internal, "iscsi: failed to mkdir /wrong/mount/path, error")},
+			Readonly:         true}, status.Error(codes.Internal, "iscsi: failed to mkdir /wrong/mount/path, error")},
 
 		"missingTargetInformationFailure": {&csi.NodePublishVolumeRequest{VolumeId: volume1,
-			TargetPath: "/mount/path",
+			TargetPath:       "/mount/path",
 			VolumeAttributes: make(map[string]string),
-			Readonly: true}, status.Error(codes.Internal, "iSCSI target information is missing")},
+			Readonly:         true}, status.Error(codes.Internal, "iSCSI target information is missing")},
 	}
 
 	for k, v := range testCases {
@@ -88,8 +88,8 @@ func TestNodeUnpublishVolume(t *testing.T) {
 		req *csi.NodeUnpublishVolumeRequest
 		err error
 	}{
-		"success": {&csi.NodeUnpublishVolumeRequest{TargetPath: "/mountexist", VolumeId: volume1,}, nil},
-		"failure": {&csi.NodeUnpublishVolumeRequest{TargetPath: "/mountmissing", VolumeId: volume1,}, status.Error(13, "Warning: Unmount skipped because path does not exist: /mountmissing")},
+		"success": {&csi.NodeUnpublishVolumeRequest{TargetPath: "/mountexist", VolumeId: volume1}, nil},
+		"failure": {&csi.NodeUnpublishVolumeRequest{TargetPath: "/mountmissing", VolumeId: volume1}, status.Error(13, "Warning: Unmount skipped because path does not exist: /mountmissing")},
 	}
 
 	for k, v := range testCases {
@@ -132,8 +132,7 @@ func TestNodeUnstageVolume(t *testing.T) {
 	}
 }
 
-func
-TestNodeGetId(t *testing.T) {
+func TestNodeGetId(t *testing.T) {
 	testCases := map[string]struct {
 		req *csi.NodeGetIdRequest
 	}{
@@ -149,8 +148,7 @@ TestNodeGetId(t *testing.T) {
 	}
 }
 
-func
-TestNodeGetCapabilities(t *testing.T) {
+func TestNodeGetCapabilities(t *testing.T) {
 	testCases := map[string]struct {
 		req *csi.NodeGetCapabilitiesRequest
 	}{

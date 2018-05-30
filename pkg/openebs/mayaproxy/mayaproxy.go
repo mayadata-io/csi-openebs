@@ -1,14 +1,14 @@
 package mayaproxy
 
 import (
-	"encoding/json"
-	"github.com/golang/glog"
-	"net/http"
 	"bytes"
-	"io/ioutil"
+	"encoding/json"
+	"errors"
+	"github.com/golang/glog"
 	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
 	"gopkg.in/yaml.v2"
-	"errors"
+	"io/ioutil"
+	"net/http"
 	"net/url"
 )
 
@@ -130,12 +130,12 @@ func requestServerGet(url *url.URL) (*http.Response, error) {
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
 
 	code := resp.StatusCode
 	if code != http.StatusOK {
-		return nil, errors.New(http.StatusText(code))
+		return resp, errors.New(http.StatusText(code))
 	}
 
 	return resp, nil

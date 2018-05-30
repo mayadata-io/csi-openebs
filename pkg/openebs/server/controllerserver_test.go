@@ -17,18 +17,21 @@ limitations under the License.
 package server
 
 import (
-	"testing"
-	"k8s.io/api/core/v1"
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
-	"fmt"
-	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
-	"encoding/json"
-	"github.com/openebs/csi-openebs/pkg/openebs/mayaproxy"
-	"net/url"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/openebs/csi-openebs/pkg/openebs/mayaproxy"
+	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"strings"
+	"net/url"
+	"testing"
+	"net/http"
 )
 
 const (
@@ -130,7 +133,6 @@ var (
 	countGetVolume    int
 	countListVolumes  int
 	countCreateVolume int
-	countDeleteVolume int
 
 	// default valid values
 	mapiURI   *url.URL
@@ -159,7 +161,7 @@ var (
 	}
 )
 
-// initializes to default mocking values
+// initializes to default mocking structs
 // this method can be called after end of every test functions
 func resetToDefault() {
 
@@ -192,13 +194,12 @@ func init() {
 }
 
 // getMayaVolume will return an object of mayav1.Volume filling its Annotations with jsonMap
-func getMayaVolume(jsonMap map[string]interface{}) mayav1.Volume {
-	return mayav1.Volume{Metadata: struct {
+func getMayaVolume(jsonMap map[string]interface{}) *mayav1.Volume {
+	return &mayav1.Volume{Metadata: struct {
 		Annotations       interface{} `json:"annotations"`
 		CreationTimestamp interface{} `json:"creationTimestamp"`
 		Name              string      `json:"name"`
 	}{Annotations: jsonMap, CreationTimestamp: "", Name: ""}}
-
 }
 
 // Mock struct for ClientService
@@ -226,36 +227,39 @@ func (mMayaService MockMayaService) GetVolume(mapiURI *url.URL, volumeName strin
 		jsonMap := make(map[string]interface{})
 		json.Unmarshal([]byte(annotation[0]), &jsonMap)
 		v1 := getMayaVolume(jsonMap)
-		return &v1, nil
+		return v1, nil
 	}
 	countGetVolume++
-	return nil, errors.New("HTTP Status error from maya-apiserver: Internal Server Error")
+	return nil, errors.New(http.StatusText(404))
 
 }
 func (mMayaService MockMayaService) ListAllVolumes(mapiURI *url.URL) (*[]mayav1.Volume, error) {
-	// first call w countListVolumes is always failure. Only subsequent calls can return volume list
+	// first call (default countListVolumes=0) is always failure.
 	if countListVolumes > 0 {
 		var volumesList mayav1.VolumeList
 		json.Unmarshal([]byte(volumeList), &volumesList)
 		return &volumesList.Items, nil
 	}
-	// below behaviour only to make it consistent w other mocked methods
+	// To make subsequent calls work
 	countListVolumes++
 	return nil, errors.New("HTTP Status error from maya-apiserver: Internal Server Error")
 }
+
 func (mMayaService MockMayaService) CreateVolume(mapiURI *url.URL, spec mayav1.VolumeSpec) error {
+	// first call (default countCreateVolume=0) is always failure.
 	if countCreateVolume > 0 {
 		return nil
 	}
+	// To make subsequent calls work
 	countCreateVolume++
-	return errors.New("http error")
+	return errors.New(http.StatusText(http.StatusInternalServerError))
 }
+
 func (mMayaService MockMayaService) DeleteVolume(mapiURI *url.URL, volumeName string) error {
-	if countDeleteVolume > 0 {
+	if volumeName == "csi-volume-1" {
 		return nil
 	}
-	countDeleteVolume++
-	return errors.New("")
+	return errors.New("Internal Server Error")
 }
 
 func (mK8sClient MockK8sClient) getK8sClient() (*kubernetes.Clientset, error) {
@@ -267,20 +271,24 @@ func (mK8sClient MockK8sClient) getSvcObject(client *kubernetes.Clientset, names
 
 // Test functions
 func TestCheckArguments(t *testing.T) {
-	// The mocked method mayaproxy.CreateVolume will return error for the first call
-	req := &csi.CreateVolumeRequest{Name: "csi-volume-1"}
-	if err := checkArguments(req); err == nil {
-		t.Errorf("Expected error when req=%v", req)
+	defer resetToDefault()
+	testCases := map[string]struct {
+		req *csi.CreateVolumeRequest
+		err error
+	}{
+		"failureMissingVolName":          {&csi.CreateVolumeRequest{}, errors.New("missing name in request")},
+		"failureMissingVolCapability":    {&csi.CreateVolumeRequest{Name: "csi-volume-1"}, errors.New("missing volume capabilities in request")},
+		"failureMissingStorageClassName": {&csi.CreateVolumeRequest{Name: "csi-volume-1", VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}}}, errors.New("missing storage-class-name in request")},
+		"success": {&csi.CreateVolumeRequest{Name: "csi-volume-1",
+			VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}},
+			Parameters: map[string]string{"storage-class-name": "openebs"}}, nil},
 	}
 
-	req = &csi.CreateVolumeRequest{Name: "csi-volume-1", VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}}}
-	if err := checkArguments(req); err == nil {
-		t.Errorf("Expected error when req=%v", req)
-	}
-
-	req = &csi.CreateVolumeRequest{Name: "csi-volume-1", VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}}, Parameters: map[string]string{"storage-class-name": "openebs"}}
-	if err := checkArguments(req); err != nil {
-		t.Errorf("Expected success when req=%v", req)
+	// run test sequentially because mocked method CreateVolume' behaviour is dependent on number of calls made
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			assert.Equal(t, checkArguments(v.req), v.err)
+		})
 	}
 }
 
@@ -294,188 +302,172 @@ func TestGetVolumeAttributes(t *testing.T) {
 		"capacity":       "3000000000B",
 	}
 
-	// success case
-	jsonMap := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(annotation[0]), &jsonMap); err != nil {
-		t.Errorf(fmt.Sprintf("%s", err))
-	}
+	validJsonMap := make(map[string]interface{})
+	json.Unmarshal([]byte(annotation[0]), &validJsonMap)
+	InvalidJsonMap := make(map[string]interface{})
+	json.Unmarshal([]byte(annotation[1]), &InvalidJsonMap)
 
-	vol := getMayaVolume(jsonMap)
-	attributes, err := getVolumeAttributes(&vol)
-	if err != nil {
-		t.Errorf("Unexpected error occurred: %s", err)
+	testCases := map[string]struct {
+		input          *mayav1.Volume
+		expectedOutput map[string]string
+		err            error
+	}{
+		"success":            {getMayaVolume(validJsonMap), expectedAttributes, nil},
+		"failureAnnotation":  {getMayaVolume(InvalidJsonMap), nil, errors.New("required volume attribute " + mayav1.OpenebsTargetPortal + " be cannot nil")},
+		"failureEmptyVolume": {nil, nil, errors.New("volume or its annotations cannot be nil")},
 	}
-
-	if len(attributes) != len(expectedAttributes) {
-		t.Errorf("Unexpected length of attributes, expected %d got %d", len(expectedAttributes), len(attributes))
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			attributes, err := getVolumeAttributes(v.input)
+			if v.expectedOutput != nil {
+				for key, val := range expectedAttributes {
+					assert.Equal(t, val, attributes[key])
+				}
+			}
+			assert.Equal(t, err, v.err)
+		})
 	}
-
-	// check if v1=v2 for [k,v1] & [k,v2] maps
-	for k, v := range expectedAttributes {
-		if v != attributes[k] {
-			t.Errorf("expected %v : %v got %v : %v", k, v, k, attributes[k])
-		}
-	}
-
-	// error case when annotations are missing
-	jsonMap = make(map[string]interface{})
-	if err := json.Unmarshal([]byte(annotation[1]), &jsonMap); err != nil {
-		t.Errorf(fmt.Sprintf("%s", err))
-	}
-
-	vol = getMayaVolume(jsonMap)
-	_, err = getVolumeAttributes(&vol)
-	if err == nil {
-		t.Errorf("missing volume annotation should cause error")
-	}
-
-	// error case when volume passed is nil
-	_, err = getVolumeAttributes(nil)
-	if err == nil {
-		t.Errorf("nil volume should have caused an error")
-	}
-
 }
 
 func TestCreateVolumeSpec(t *testing.T) {
-	// create request object
-	req := &csi.CreateVolumeRequest{CapacityRange: &csi.CapacityRange{RequiredBytes: 1024 * 1024 * 1024},
-		Name: "pvc-as88sd-a8s-das8f-as8df-dfgfd-88",
-		Parameters: map[string]string{"storage-class-name": "openebs-sc"},
+	testCases := map[string]struct {
+		req                                                      *csi.CreateVolumeRequest
+		storage, storageClass, name, namespace, kind, apiVersion string
+	}{
+		"success": {&csi.CreateVolumeRequest{CapacityRange: &csi.CapacityRange{RequiredBytes: 1024 * 1024 * 1024}, Name: "pvc-as88sd-a8s-das8f-as8df-dfgfd-88", Parameters: map[string]string{"storage-class-name": "openebs-sc"},},
+			oneGB, "openebs-sc", "pvc-as88sd-a8s-das8f-as8df-dfgfd-88", "default", "PersistentVolumeClaim", "v1"},
 	}
-
-	vSpec := createVolumeSpec(req)
-
-	if vSpec.Metadata.Labels.Storage != oneGB {
-		t.Errorf("Expected %s got %s", oneGB, vSpec.Metadata.Labels.Storage)
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			vSpec := createVolumeSpec(v.req)
+			assert.Equal(t, v.storage, vSpec.Metadata.Labels.Storage)
+			assert.Equal(t, v.storageClass, vSpec.Metadata.Labels.StorageClass)
+			assert.Equal(t, v.name, vSpec.Metadata.Name)
+			assert.Equal(t, v.namespace, vSpec.Metadata.Labels.Namespace)
+			assert.Equal(t, v.kind, vSpec.Kind)
+			assert.Equal(t, v.apiVersion, vSpec.APIVersion)
+		})
 	}
-	if vSpec.Metadata.Labels.StorageClass != "openebs-sc" {
-		t.Errorf("Expected openebs-sc got %s", vSpec.Metadata.Labels.StorageClass)
-	}
-	if vSpec.Metadata.Name != "pvc-as88sd-a8s-das8f-as8df-dfgfd-88" {
-		t.Errorf("Expected pvc-as88sd-a8s-das8f-as8df-dfgfd-88 got %s", vSpec.Metadata.Name)
-	}
-	if vSpec.Metadata.Labels.Namespace != "default" {
-		t.Errorf("Expected default got %s", vSpec.Metadata.Labels.Namespace)
-	}
-	if vSpec.Kind != "PersistentVolumeClaim" {
-		t.Errorf("Expected PersistentVolumeClaim got %s", vSpec.Kind)
-	}
-	if vSpec.APIVersion != "v1" {
-		t.Errorf("Expected v1 got %s", vSpec.Kind)
-	}
-
 }
 
 func TestCreateVolume(t *testing.T) {
 	defer resetToDefault()
-
-	req := &csi.CreateVolumeRequest{Name: "csi-volume-1",
+	validRequest := &csi.CreateVolumeRequest{Name: "csi-volume-1",
 		VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}},
 		Parameters: map[string]string{"storage-class-name": "openebs"},
-		CapacityRange: &csi.CapacityRange{RequiredBytes: 10000000000},
-	}
-	resp, err := controller.CreateVolume(context.Background(), req)
-
-	if err == nil {
-		t.Errorf("mocked mayaConfig should not have caused error")
+		CapacityRange: &csi.CapacityRange{RequiredBytes: 3000000000},
 	}
 
-	resp, err = controller.CreateVolume(context.Background(), req)
-	if err != nil {
-		t.Errorf("Mocked mayaconfig etc. should not have caused error")
-	} else {
-		if resp.GetVolume().CapacityBytes == 10000000000 {
-			t.Errorf("Wrong volume capacity created")
+	testCases := map[string]struct {
+		req  *csi.CreateVolumeRequest
+		resp *csi.CreateVolumeResponse
+		err  error
+	}{
+		"failure": {validRequest, nil, status.Error(codes.Unavailable, fmt.Sprintf("Error from maya-api-server: %s", http.StatusText(http.StatusInternalServerError)))},
+		"success": {validRequest, &csi.CreateVolumeResponse{Volume: &csi.Volume{Id: "csi-volume-1", CapacityBytes: 3000000000}}, nil},
+	}
+
+	// run test sequentially because mocked method CreateVolume' behaviour is dependent on number of calls made
+	for k, v := range testCases {
+		if k == "success" {
+			// if countGetVolume zero only then mocked CreateVolume method will called
+			countGetVolume = 0
 		}
-	}
-
-	mayaConfigBuilder = builder
-	countGetVolume = 0
-	mayaConfig = nil
-	wrapper := &mayaproxy.K8sClientWrapper{ClientService: mK8sClient}
-	clientWrapper = wrapper
-	_, err = controller.CreateVolume(context.Background(), req)
-
-	if mayaConfig == nil {
-		t.Errorf("mayaConfig should have been initialized if empty initially")
-	}
-
-	countGetVolume = 0
-	mayaConfig = mConfig
-	req = &csi.CreateVolumeRequest{Name: "csi-volume-1",
-		VolumeCapabilities: []*csi.VolumeCapability{{AccessMode: nil}},
-		Parameters: map[string]string{"storage-class-name": "openebs"},
-		CapacityRange: &csi.CapacityRange{RequiredBytes: 10000000000},
-	}
-
-	resp, err = controller.CreateVolume(context.Background(), req)
-	if err != nil {
-		t.Errorf("mocked mayaConfig should not have caused error")
+		resp, err := controller.CreateVolume(context.Background(), v.req)
+		assert.Equal(t, v.err, err)
+		if v.resp != nil {
+			assert.Equal(t, v.resp.Volume.GetCapacityBytes(), resp.Volume.GetCapacityBytes())
+		}
 	}
 }
 
 func TestListVolumes(t *testing.T) {
 	defer resetToDefault()
 
-	// create an empty reqest
-	req := &csi.ListVolumesRequest{}
-	res, err := controller.ListVolumes(context.Background(), req)
-	if err == nil {
-		t.Errorf("internal server error from mapi server should cause ListVolumes to fail")
+	testCases := map[string]struct {
+		req *csi.ListVolumesRequest
+		len int
+		err error
+	}{
+		"failure": {&csi.ListVolumesRequest{}, 0, status.Error(codes.Unavailable, "HTTP Status error from maya-apiserver: Internal Server Error")},
+		"success": {&csi.ListVolumesRequest{}, 2, nil},
 	}
 
-	// set to one explicitly
-	countListVolumes = 1
-
-	res, err = controller.ListVolumes(context.Background(), req)
-	if err != nil {
-		t.Errorf("ListVolume failed with correct data")
+	// run test sequentially because mocked method ListAllVolumes' behaviour is dependent on number of calls made
+	for _, v := range testCases {
+		resp, err := controller.ListVolumes(context.Background(), v.req)
+		assert.Equal(t, v.err, err)
+		if v.len > 0 {
+			assert.Equal(t, v.len, len(resp.Entries))
+		}
 	}
-	if len(res.Entries) < 2 {
-		t.Errorf("expected 2 volumes got %d", len(res.Entries))
-	}
-
-	// reset to initial value
-	countListVolumes = 0
-
 }
 
 func TestDeleteVolume(t *testing.T) {
 	defer resetToDefault()
-	req := &csi.DeleteVolumeRequest{}
-	_, err = controller.DeleteVolume(context.Background(), req)
-	if err == nil {
-		t.Errorf("expected error when volume could not be deleted at mapi server")
+
+	testCases := map[string]struct {
+		req  *csi.DeleteVolumeRequest
+		resp *csi.DeleteVolumeResponse
+		err  error
+	}{
+		"success": {&csi.DeleteVolumeRequest{VolumeId: "csi-volume-1"}, &csi.DeleteVolumeResponse{}, nil},
+		"failure": {&csi.DeleteVolumeRequest{VolumeId: "csi-volume-2"}, nil, status.Error(codes.Unavailable, "Error from maya-api-server: "+http.StatusText(http.StatusInternalServerError))},
 	}
 
-	_, err := controller.DeleteVolume(context.Background(), req)
-	if err != nil {
-		t.Errorf("expected no error when volume is successfully deleted at mapi server")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			resp, err := controller.DeleteVolume(context.Background(), v.req)
+			assert.Equal(t, v.err, err)
+			assert.Equal(t, v.resp, resp)
+		})
 	}
-
 }
 
 func TestControllerPublishVolume(t *testing.T) {
-	req := &csi.ControllerPublishVolumeRequest{}
-	_, err := controller.ControllerPublishVolume(context.Background(), req)
-	if err == nil || !strings.Contains(err.Error(), "Unimplemented") {
-		t.Errorf("expected error 12: Unimplemented got %s", err)
+	testCases := map[string]struct {
+		req *csi.ControllerPublishVolumeRequest
+	}{
+		"success": {&csi.ControllerPublishVolumeRequest{}},
+	}
+
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			resp, err := controller.ControllerPublishVolume(context.Background(), v.req)
+			assert.Nil(t, resp)
+			assert.Error(t, status.Error(codes.Unimplemented, ""), err)
+		})
 	}
 }
 
 func TestControllerUnpublishVolume(t *testing.T) {
-	req := &csi.ControllerUnpublishVolumeRequest{}
-	_, err := controller.ControllerUnpublishVolume(context.Background(), req)
-	if err == nil || !strings.Contains(err.Error(), "Unimplemented") {
-		t.Errorf("expected error 12: Unimplemented got %s", err)
+	testCases := map[string]struct {
+		req *csi.ControllerUnpublishVolumeRequest
+	}{
+		"success": {&csi.ControllerUnpublishVolumeRequest{}},
+	}
+
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			resp, err := controller.ControllerUnpublishVolume(context.Background(), v.req)
+			assert.Nil(t, resp)
+			assert.Error(t, status.Error(codes.Unimplemented, ""), err)
+		})
 	}
 }
 
 func TestGetCapacity(t *testing.T) {
-	req := &csi.GetCapacityRequest{}
-	_, err := controller.GetCapacity(context.Background(), req)
-	if err == nil || !strings.Contains(err.Error(), "Unimplemented") {
-		t.Errorf("expected error 12: Unimplemented got %s", err)
+	testCases := map[string]struct {
+		req *csi.GetCapacityRequest
+	}{
+		"success": {&csi.GetCapacityRequest{}},
+	}
+
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			resp, err := controller.GetCapacity(context.Background(), v.req)
+			assert.Nil(t, resp)
+			assert.Error(t, status.Error(codes.Unimplemented, ""), err)
+		})
 	}
 }

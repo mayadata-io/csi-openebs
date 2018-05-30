@@ -1,10 +1,12 @@
 package mayaproxy
 
 import (
-	"testing"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 	"net/url"
+	"testing"
+	"github.com/stretchr/testify/assert"
+	"errors"
 )
 
 var (
@@ -24,33 +26,42 @@ func (k8sClient *K8sClientMock) getSvcObject(client *kubernetes.Clientset, names
 }
 
 func TestSetupMayaConfig(t *testing.T) {
-	mayaConfig := &MayaConfig{}
-
-	err := mayaConfig.SetupMayaConfig(&K8sClientMock{})
-	if err != nil {
-		t.Errorf("Test should have passed for ClusterIp: 10.20.20.30 and an empty client set")
+	testCases := map[string]struct {
+		client K8sClientService
+		err    error
+	}{
+		"success": {&K8sClientMock{}, nil},
 	}
-
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			err := mayaConfig.SetupMayaConfig(v.client)
+			assert.Nil(t, err)
+		})
+	}
 }
 
 func TestGetK8sClient(t *testing.T) {
+	// always result in error because test cases don't run in kubernetes cluster
 	_, err := client.getK8sClient()
-	if err == nil {
-		t.Errorf("Missing kubernetes server should have caused error")
-	}
+	assert.Equal(t, errors.New("unable to load in-cluster configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be defined"), err)
 }
 
 func TestGetNewMayaConfig(t *testing.T) {
-	_, err := MayaConfigBuilder{}.GetNewMayaConfig(&K8sClientWrapper{&K8sClientMock{}})
-	if err != nil {
-		t.Errorf("Mocked Client Service should not have caused error")
+	testCases := map[string]struct {
+		inputWrapper *K8sClientWrapper
+		err          error
+	}{
+		"success": {&K8sClientWrapper{&K8sClientMock{}}, nil},
 	}
 
-	config, err := MayaConfigBuilder{}.GetNewMayaConfig(nil)
-	if err == nil {
-		t.Errorf("Missing kubernetes server should have caused error")
-	}
-	if config != nil {
-		t.Errorf("MayaConfig should be nil if setup fails")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			config, err := MayaConfigBuilder{}.GetNewMayaConfig(v.inputWrapper)
+			assert.Equal(t, v.err, err)
+			if v.err != nil {
+				assert.NotNil(t, config)
+			}
+
+		})
 	}
 }

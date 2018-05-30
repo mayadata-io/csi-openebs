@@ -1,15 +1,15 @@
 package mayaproxy
 
 import (
-	"net/url"
-	"github.com/golang/glog"
-	"k8s.io/client-go/kubernetes"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/rest"
-	"k8s.io/api/core/v1"
-	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
-	"os"
 	"fmt"
+	"github.com/golang/glog"
+	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
+	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"net/url"
+	"os"
 )
 
 // logic is separated into interfaces which makes testing easier

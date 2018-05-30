@@ -21,12 +21,12 @@ import (
 	"os"
 	"sync"
 
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
-	"strings"
-	"fmt"
 	"context"
+	"fmt"
+	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"github.com/golang/glog"
 	"google.golang.org/grpc"
+	"strings"
 )
 
 // Defines Non blocking GRPC server interfaces

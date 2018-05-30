@@ -33,7 +33,7 @@ type openEbs struct {
 }
 
 // function to create NonBlockingGRPCServer implementing struct object
-type NewNonBlockingGRPCServer func() (server.NonBlockingGRPCServer)
+type NewNonBlockingGRPCServer func() server.NonBlockingGRPCServer
 
 const (
 	driverName = "csi-openebs"

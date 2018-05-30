@@ -17,8 +17,8 @@ package main
 
 import (
 	"flag"
-	"os"
 	"github.com/openebs/csi-openebs/pkg/openebs"
+	"os"
 )
 
 func init() {
@@ -26,8 +26,8 @@ func init() {
 }
 
 var (
-	endpoint   = flag.String("endpoint", "unix:///csi/csi.sock", "CSI endpoint")
-	nodeID     = flag.String("nodeid", "CSINode", "node id")
+	endpoint = flag.String("endpoint", "unix:///csi/csi.sock", "CSI endpoint")
+	nodeID   = flag.String("nodeid", "CSINode", "node id")
 )
 
 func main() {

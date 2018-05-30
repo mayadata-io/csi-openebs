@@ -1,14 +1,16 @@
 package mayaproxy
 
 import (
-	"net/url"
-	"net/http/httptest"
-	"net/http"
-	"net"
-	"testing"
 	mayav1 "github.com/openebs/csi-openebs/pkg/openebs/v1"
 	"io/ioutil"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
+	"testing"
+	"github.com/stretchr/testify/assert"
+	"errors"
 )
 
 var (
@@ -190,22 +192,24 @@ func TestCreateVolume(t *testing.T) {
 	createAndStartServer(handler)
 	defer tearDownServer()
 
-	// Volume successfully created
-	err := mService.CreateVolume(mpMapiURI, *spec1)
-	if err != nil {
-		t.Errorf("Volume creation failed")
+	testCases := map[string]struct {
+		serverURL *url.URL
+		spec      *mayav1.VolumeSpec
+		err       error
+	}{
+		"success": {mpMapiURI, spec1, nil},
+		"failure": {mpMapiURI, spec2, errors.New(http.StatusText(http.StatusInternalServerError))},
 	}
-
-	// Server error
-	err = mService.CreateVolume(mpMapiURI, *spec2)
-	if err == nil {
-		t.Errorf("Internal server error should cause volume creation failure")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			err := mService.CreateVolume(v.serverURL, *v.spec)
+			assert.Equal(t, v.err, err)
+		})
 	}
 
 }
 
 func TestDeleteVolume(t *testing.T) {
-
 	// Request handler
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -223,21 +227,22 @@ func TestDeleteVolume(t *testing.T) {
 	createAndStartServer(handler)
 	defer tearDownServer()
 
-	// Volume successfully created
-	err := mService.DeleteVolume(mpMapiURI, volume1)
-	if err != nil {
-		t.Errorf("Volume deletion failed")
+	testCases := map[string]struct {
+		serverURL *url.URL
+		volName   string
+		err       error
+	}{
+		"successExistingVolume":       {mpMapiURI, volume1, nil},
+		"successAlreadyDeletedVolume": {mpMapiURI, volume3, nil},
+		"failure":                     {mpMapiURI, volume2, errors.New(http.StatusText(http.StatusInternalServerError))},
+	}
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			err := mService.DeleteVolume(v.serverURL, v.volName)
+			assert.Equal(t, v.err, err)
+		})
 	}
 
-	err = mService.DeleteVolume(mpMapiURI, volume2)
-	if err == nil {
-		t.Errorf("Internal error should cause deletion failure")
-	}
-
-	err = mService.DeleteVolume(mpMapiURI, volume3)
-	if err != nil {
-		t.Errorf("Volume deletion should not fail for already deleted volume")
-	}
 }
 
 func TestRequestServerGet(t *testing.T) {
@@ -254,17 +259,20 @@ func TestRequestServerGet(t *testing.T) {
 	createAndStartServer(handler)
 	defer tearDownServer()
 
-	_, err := requestServerGet(mpMapiURI)
-	if err == nil {
-		t.Errorf("Error from mapi server should cause error")
+	testCases := map[string]struct {
+		serverURL *url.URL
+		err       error
+	}{
+		"success": {&url.URL{Host: listenUrl + ":" + portStr, Scheme: "http", Path: "success"}, nil},
+		"failure": {&url.URL{Host: listenUrl + ":" + portStr, Scheme: "http"}, errors.New(http.StatusText(http.StatusBadGateway))},
 	}
 
-	mpMapiURI.Path = "success"
-	defer initServerURI()
-
-	_, err = requestServerGet(mpMapiURI)
-	if err != nil {
-		t.Errorf("200 Response from server should not cause error")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			resp, err := requestServerGet(v.serverURL)
+			resp.Body.Close()
+			assert.Equal(t, v.err, err)
+		})
 	}
 }
 
@@ -285,23 +293,26 @@ func TestGetVolume(t *testing.T) {
 	createAndStartServer(handler)
 	defer tearDownServer()
 
-	vol, err := mService.GetVolume(mpMapiURI, volume1)
-	if err != nil {
-		t.Errorf("volume response from server should not cause error")
-	}
-	if vol == nil {
-		t.Errorf("volume response from server should not result in empty volume object")
-	}
-
-	_, err = mService.GetVolume(mpMapiURI, volume2)
-	if err == nil {
-		t.Errorf("server error should cause an error")
+	testCases := map[string]struct {
+		serverURL *url.URL
+		volName   string
+		err       error
+	}{
+		"success":            {mpMapiURI, volume1, nil},
+		"failureUnreachable": {mpMapiURI, volume2, errors.New(http.StatusText(http.StatusBadGateway))},
+		"failureNotFound":    {mpMapiURI, volume3, errors.New(http.StatusText(http.StatusNotFound))},
 	}
 
-	_, err = mService.GetVolume(mpMapiURI, volume3)
-	if err == nil {
-		t.Errorf("server error should cause an error")
+	for k, v := range testCases {
+		t.Run(k, func(t *testing.T) {
+			vol, err := mService.GetVolume(v.serverURL, v.volName)
+			assert.Equal(t, v.err, err)
+			if v.err == nil {
+				assert.NotNil(t, vol)
+			}
+		})
 	}
+
 }
 
 func TestListVolumesResponse(t *testing.T) {
@@ -318,12 +329,20 @@ func TestListVolumesResponse(t *testing.T) {
 	}
 
 	createAndStartServer(handler)
-	volumes, err := mService.ListAllVolumes(mpMapiURI)
-	if err != nil {
-		t.Errorf("List volume error")
+	testCasesSuccess := map[string]struct {
+		serverURL *url.URL
+		len       int
+		err       error
+	}{
+		"success": {mpMapiURI, 2, nil},
 	}
-	if len(*volumes) != 2 {
-		t.Errorf("Expected 2 volumes got %d", len(*volumes))
+
+	for k, v := range testCasesSuccess {
+		t.Run(k, func(t *testing.T) {
+			vols, err := mService.ListAllVolumes(v.serverURL)
+			assert.Equal(t, v.err, err)
+			assert.Equal(t, v.len, len(*vols))
+		})
 	}
 	tearDownServer()
 
@@ -334,12 +353,20 @@ func TestListVolumesResponse(t *testing.T) {
 			}
 		}
 	}
-
 	createAndStartServer(handler)
 	defer tearDownServer()
 
-	_, err = mService.ListAllVolumes(mpMapiURI)
-	if err == nil {
-		t.Errorf("server error should have caused error")
+	testCasesFailure := map[string]struct {
+		serverURL *url.URL
+		err       error
+	}{
+		"failureInternalServerError": {mpMapiURI, errors.New(http.StatusText(http.StatusInternalServerError))},
+	}
+
+	for k, v := range testCasesFailure {
+		t.Run(k, func(t *testing.T) {
+			_, err := mService.ListAllVolumes(v.serverURL)
+			assert.Equal(t, v.err, err)
+		})
 	}
 }
