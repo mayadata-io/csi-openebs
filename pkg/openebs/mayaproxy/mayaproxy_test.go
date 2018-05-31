@@ -270,7 +270,9 @@ func TestRequestServerGet(t *testing.T) {
 	for k, v := range testCases {
 		t.Run(k, func(t *testing.T) {
 			resp, err := requestServerGet(v.serverURL)
-			resp.Body.Close()
+			if err == nil {
+				resp.Body.Close()
+			}
 			assert.Equal(t, v.err, err)
 		})
 	}

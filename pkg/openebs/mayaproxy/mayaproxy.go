@@ -33,11 +33,11 @@ func (mayaService *MayaService) CreateVolume(mapiURI *url.URL, spec mayav1.Volum
 	}
 
 	resp, err := c.Do(req)
-	defer resp.Body.Close()
 	if err != nil {
 		return err
 	}
-
+	defer resp.Body.Close()
+	
 	code := resp.StatusCode
 	if code != http.StatusOK {
 		return errors.New(http.StatusText(code))
@@ -63,7 +63,6 @@ func (mayaService *MayaService) DeleteVolume(mapiURI *url.URL, volumeName string
 
 	glog.V(3).Infof("Requesting for volume delete at %s", url.String())
 	resp, err := requestServerGet(url)
-	defer resp.Body.Close()
 	if err != nil {
 		// if volume does not exist then no problem. It has been deleted in previous calls.
 		if err.Error() == http.StatusText(404) {
@@ -71,6 +70,7 @@ func (mayaService *MayaService) DeleteVolume(mapiURI *url.URL, volumeName string
 		}
 		return err
 	}
+	defer resp.Body.Close()
 
 	glog.Infof("Volume deletion successfully initiated for %s", volumeName)
 	return nil
@@ -88,10 +88,10 @@ func (mayaService *MayaService) GetVolume(mapiURI *url.URL, volumeName string) (
 	glog.V(3).Infof("Requesting for volume details at %s", url.String())
 
 	resp, err := requestServerGet(url)
-	defer resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	// Fill the obtained json into volume
 	json.NewDecoder(resp.Body).Decode(&volume)
 	glog.Infof("Volume details successfully retrieved")
@@ -111,10 +111,10 @@ func (mayaService *MayaService) ListAllVolumes(mapiURI *url.URL) (*[]mayav1.Volu
 	glog.V(3).Infof("Requesting for volumes list at %s", url.String())
 
 	resp, err := requestServerGet(url)
-	defer resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	// Fill the obtained json into volume
 	json.NewDecoder(resp.Body).Decode(&volumesList)
 	glog.Infof("volume Details Successfully Retrieved %v", volumesList)
@@ -131,12 +131,14 @@ func requestServerGet(url *url.URL) (*http.Response, error) {
 
 	resp, err := c.Do(req)
 	if err != nil {
-		return resp, err
+		resp.Body.Close()
+		return nil, err
 	}
 
 	code := resp.StatusCode
 	if code != http.StatusOK {
-		return resp, errors.New(http.StatusText(code))
+		resp.Body.Close()
+		return nil, errors.New(http.StatusText(code))
 	}
 
 	return resp, nil
