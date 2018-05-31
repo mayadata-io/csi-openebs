@@ -94,7 +94,8 @@ func (mayaService *MayaService) GetVolume(mapiURI *url.URL, volumeName string) (
 	}
 	// Fill the obtained json into volume
 	json.NewDecoder(resp.Body).Decode(&volume)
-	glog.Infof("Volume details successfully retrieved %v", volume)
+	glog.Infof("Volume details successfully retrieved")
+	glog.V(3).Infof("volume=%v", volume)
 
 	return &volume, nil
 }

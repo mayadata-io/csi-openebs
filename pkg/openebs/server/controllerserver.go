@@ -106,8 +106,11 @@ func createVolumeSpec(req *csi.CreateVolumeRequest) mayav1.VolumeSpec {
 	volumeSpec.Metadata.Labels.Storage = fmt.Sprintf("%dB", req.GetCapacityRange().GetRequiredBytes())
 	volumeSpec.Metadata.Labels.StorageClass = req.Parameters[mayav1.StorageClassName]
 	volumeSpec.Metadata.Name = req.Name
-	volumeSpec.Metadata.Labels.Namespace = mayav1.DefaultNamespace
-
+	if req.Parameters["namespace"] == "" {
+		volumeSpec.Metadata.Labels.Namespace = mayav1.DefaultNamespace
+	} else {
+		volumeSpec.Metadata.Labels.Namespace = req.Parameters["namespace"]
+	}
 	return volumeSpec
 }
 

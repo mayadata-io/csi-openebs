@@ -7,6 +7,7 @@ reclaimPolicy: Delete
 volumeBindingMode: Immediate
 parameters:
   storage-class-name: csi-openebs-sc-1
+  namespace: default
 ---
 apiVersion: v1
 kind: ServiceAccount
